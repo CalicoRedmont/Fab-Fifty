@@ -114,6 +114,8 @@
           vy: 0,
           state: "idle",
           fireFlash: 0,
+          thrustAlpha: 0,
+          thrustPhase: 0,
           destroyed: false
         },
         enemyMissiles: [],
@@ -217,6 +219,12 @@
       p.x = clamp(p.x + p.vx * dt, 72, this.width - 72);
       p.y = clamp(p.y + p.vy * dt, 104, this.height - 54);
       p.state = dx < 0 ? "bank_left" : dx > 0 ? "bank_right" : p.fireFlash > 0 ? "firing" : "idle";
+      const moving = dx !== 0 || dy !== 0;
+      p.thrustPhase += dt * (moving ? 26 : 18);
+      p.thrustAlpha = moving
+        ? Math.min(1, p.thrustAlpha + dt * 12)
+        : Math.max(0, p.thrustAlpha - dt * 24);
+      if (p.thrustAlpha < 0.03) p.thrustAlpha = 0;
     };
 
     Game.prototype.updateWarGameSpawns = function (dt) {
@@ -570,36 +578,118 @@
     Game.prototype.drawWarAircraft = function () {
       const ctx = this.ctx;
       const p = this.wargame.playerAircraft;
+      const bankAngle = p.state === "bank_left" ? -0.18 : p.state === "bank_right" ? 0.18 : 0;
       ctx.save();
       ctx.translate(p.x, p.y);
-      if (p.state === "bank_left") ctx.rotate(-0.18);
-      if (p.state === "bank_right") ctx.rotate(0.18);
+      ctx.rotate(bankAngle);
+      this.drawWarAircraftIcon(p, bankAngle);
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarAircraftIcon = function (p, bankAngle) {
+      const ctx = this.ctx;
+      this.drawWarAircraftThrust(p, bankAngle);
       ctx.strokeStyle = this.colors.green;
-      ctx.fillStyle = "rgba(57,255,104,0.20)";
+      ctx.fillStyle = "rgba(57,255,104,0.07)";
       ctx.shadowColor = this.colors.green;
       ctx.shadowBlur = p.fireFlash > 0 ? 18 : 10;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.8;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(0, -22);
-      ctx.lineTo(16, 8);
-      ctx.lineTo(7, 7);
-      ctx.lineTo(7, 21);
-      ctx.lineTo(0, 14);
-      ctx.lineTo(-7, 21);
-      ctx.lineTo(-7, 7);
-      ctx.lineTo(-16, 8);
+      ctx.moveTo(0, -24);
+      ctx.lineTo(4, -10);
+      ctx.lineTo(18, 8);
+      ctx.lineTo(7, 5);
+      ctx.lineTo(7, 16);
+      ctx.lineTo(3, 13);
+      ctx.lineTo(2, 22);
+      ctx.lineTo(0, 17);
+      ctx.lineTo(-2, 22);
+      ctx.lineTo(-3, 13);
+      ctx.lineTo(-7, 16);
+      ctx.lineTo(-7, 5);
+      ctx.lineTo(-18, 8);
+      ctx.lineTo(-4, -10);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+
+      ctx.save();
+      ctx.globalAlpha = 0.82;
+      ctx.strokeStyle = this.colors.green;
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -17);
+      ctx.lineTo(0, 14);
+      ctx.stroke();
       ctx.fillStyle = this.colors.white;
-      ctx.fillRect(-3, -8, 6, 10);
+      ctx.fillRect(-2, -7, 4, 9);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.42;
+      ctx.strokeStyle = this.colors.greenSoft || this.colors.green;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-5, -3);
+      ctx.lineTo(5, -3);
+      ctx.moveTo(-6, 9);
+      ctx.lineTo(6, 9);
+      ctx.stroke();
+      ctx.restore();
+
       if (p.fireFlash > 0) {
+        ctx.save();
         ctx.fillStyle = this.colors.amber;
+        ctx.shadowColor = this.colors.amber;
+        ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.moveTo(0, -32);
-        ctx.lineTo(5, -21);
-        ctx.lineTo(-5, -21);
+        ctx.lineTo(5, -22);
+        ctx.lineTo(-5, -22);
         ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    };
+
+    Game.prototype.drawWarAircraftThrust = function (p, bankAngle) {
+      const ctx = this.ctx;
+      const speed = Math.hypot(p.vx, p.vy);
+      if (speed < 1 || p.thrustAlpha <= 0) return;
+
+      const pulse = 0.74 + Math.sin(p.thrustPhase) * 0.18 + Math.sin(p.thrustPhase * 1.7) * 0.08;
+      const length = 8 + pulse * 5;
+      const worldX = -p.vx / speed;
+      const worldY = -p.vy / speed;
+      const cos = Math.cos(bankAngle);
+      const sin = Math.sin(bankAngle);
+      const localX = cos * worldX + sin * worldY;
+      const localY = -sin * worldX + cos * worldY;
+      const alpha = Math.min(0.68, p.thrustAlpha * pulse);
+      const engines = [-4.5, 4.5];
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = "rgba(190,255,198,0.92)";
+      ctx.fillStyle = "rgba(190,255,198,0.55)";
+      ctx.shadowColor = this.colors.green;
+      ctx.shadowBlur = 7;
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      for (const engineX of engines) {
+        const startX = engineX;
+        const startY = 18;
+        const tipX = startX + localX * length;
+        const tipY = startY + localY * length;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(tipX, tipY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, 1.5, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
