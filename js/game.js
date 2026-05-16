@@ -1457,7 +1457,8 @@
     }
 
     handleSetupKey(key) {
-      const maxRows = 3;
+      const optionRows = 3;
+      const maxRows = optionRows + 1;
       if (key === "Escape") {
         if (this.flow === "solo-setup") this.startSoloFlow();
         else this.startDuelFlow();
@@ -1474,6 +1475,7 @@
     }
 
     changeSetupValue(dir) {
+      if (this.setupCursor >= 3) return;
       if (this.setupCursor === 0) {
         this.modeCursor = wrap(this.modeCursor + dir, CFG.MATCH_MODES.length);
         this.selected.matchMode = CFG.MATCH_MODES[this.modeCursor].id;

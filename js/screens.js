@@ -373,8 +373,10 @@
         rows.push(["NIVEAU IA", ai.label, ai.description]);
       }
       rows.forEach((row, index) => this.drawOptionRow(row, index, 184 + index * 72, index === this.setupCursor));
+      const startSelected = this.setupCursor === rows.length;
       this.drawText("← → changer   ↑ ↓ ligne   Entrée lancer", 480, 384, 14, this.colors.amber, "center");
-      this.drawArcadeButton(390, 398, 180, 34, "START", this.colors.green);
+      this.drawArcadeButton(390, 398, 180, 34, "START", startSelected ? this.colors.amber : this.colors.green);
+      if (startSelected) this.drawText("▶", 366, 420, 18, this.colors.amber);
       const left = duel ? CFG.playerById(this.selected.p1Id) : CFG.playerById(this.selected.humanId);
       const right = duel ? CFG.playerById(this.selected.p2Id) : CFG.playerById(this.selected.opponentId);
       this.drawText(`${left.name}  VS  ${right.name}`, 480, 456, 18, this.colors.white, "center");
