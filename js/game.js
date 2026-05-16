@@ -1148,7 +1148,7 @@
         if (x > 430) this.changeSetupValue(1);
         return true;
       }
-      if (inside(x, y, 300, 368, 360, 38)) {
+      if (inside(x, y, 390, 398, 180, 34)) {
         if (this.flow === "solo-setup") this.startSoloMatch();
         else this.startDuelMatch();
         return true;
