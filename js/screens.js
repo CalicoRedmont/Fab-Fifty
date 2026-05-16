@@ -123,22 +123,35 @@
       ctx.fillStyle = color;
       ctx.shadowColor = color;
       ctx.shadowBlur = 6;
-      const words = String(str).split(" ");
-      let line = "";
       let yy = y;
       const xx = align === "center" ? x + maxWidth / 2 : x;
+      const lines = this.wrapTextLines(str, maxWidth, lineHeight);
+      lines.forEach((line) => {
+        ctx.fillText(line, xx, yy);
+        yy += lineHeight;
+      });
+      ctx.restore();
+    };
+
+    Game.prototype.wrapTextLines = function (str, maxWidth, lineHeight) {
+      const ctx = this.ctx;
+      const words = String(str).split(" ");
+      const lines = [];
+      let line = "";
+      ctx.save();
+      ctx.font = `${Math.max(12, lineHeight - 5)}px "Courier New", Courier, monospace`;
       for (const word of words) {
         const test = line ? `${line} ${word}` : word;
         if (ctx.measureText(test).width > maxWidth && line) {
-          ctx.fillText(line, xx, yy);
-          yy += lineHeight;
+          lines.push(line);
           line = word;
         } else {
           line = test;
         }
       }
-      if (line) ctx.fillText(line, xx, yy);
+      if (line) lines.push(line);
       ctx.restore();
+      return lines;
     };
 
     Game.prototype.smooth = function (start, end, t) {
@@ -852,14 +865,23 @@
       const nameY = compact ? y + 170 : y + 218;
       const labelSize = label ? (compact ? 20 : 23) : (compact ? 23 : 26);
       const detailY = compact ? y + 194 : y + 246;
-      const quoteY = compact ? y + 180 : y + 248;
       const quoteInset = compact ? 28 : 34;
       const quoteLineH = compact ? 17 : 20;
+      const quoteMaxWidth = w - quoteInset * 2;
+      const quoteLines = this.wrapTextLines(quote, quoteMaxWidth, quoteLineH);
+      const quoteFontSize = Math.max(12, quoteLineH - 5);
+      const nameBaseline = label ? detailY : nameY;
+      const quoteAreaTop = nameBaseline + (compact ? 18 : 24);
+      const quoteAreaBottom = y + h - (compact ? 16 : 22);
+      const quoteVisualH = quoteFontSize + Math.max(0, quoteLines.length - 1) * quoteLineH;
+      const centeredQuoteY = quoteAreaTop
+        + Math.max(0, (quoteAreaBottom - quoteAreaTop - quoteVisualH) / 2)
+        + quoteFontSize;
       this.panel(x, y, w, h, 0.78);
       this.drawPortrait(player, x + (w - portraitSize) / 2, portraitY, portraitSize, portraitSize, true);
       this.neon(label || player.name, x + w / 2, nameY, labelSize, this.colors.green, "center");
       if (label) this.drawText(player.name, x + w / 2, detailY, compact ? 15 : 17, this.colors.amber, "center");
-      this.wrapText(quote, x + quoteInset, quoteY, w - quoteInset * 2, quoteLineH, this.colors.amber, "center");
+      this.wrapText(quote, x + quoteInset, centeredQuoteY, quoteMaxWidth, quoteLineH, this.colors.amber, "center");
     };
 
     Game.prototype.drawSoloMachineOpponent = function (x, y, w, h) {
