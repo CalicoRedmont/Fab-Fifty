@@ -17,7 +17,7 @@
     { id: "emilie", name: "Émilie", initials: "EM", files: ["Emilie.jpg", "Emilie-px.png", "emilie-px.png", "emilie-2.png", "emilie.png"], difficulty: "hard", line: "Déjà au point suivant." },
     { id: "pierre", name: "Pierre", initials: "PI", files: ["Pierre.jpg", "Pierre-px.png", "Pierre-2.png", "Pierre.png"], difficulty: "hard", line: "Ce rebond est une feature." },
     { id: "mathilde", name: "Mathilde", initials: "MT", files: ["Mathilde.jpg", "Mathilde-px.png", "Mathilde.png"], difficulty: "easy", line: "Lecture du jeu aux rayons X" },
-    { id: "benjamain", name: "Benjamin", initials: "BJ", files: ["Benjamin.jpg", "Benjamain.jpg", "Benjamin-px.png", "Benjamain-px.png", "Benjamin.png"], difficulty: "normal", line: "Service en profondeur." },
+    { id: "benjamain", name: "Benjamin", initials: "BJ", files: ["Benjamin.jpg", "Benjamain.jpg", "Benjamin-px.png", "Benjamain-px.png", "Benjamin.png"], difficulty: "normal", line: "La précision chirurgicale, mais avec une raquette." },
     { id: "machine", name: "Machine", initials: "CPU", files: ["Machine.jpg", "Machine-px.png", "Machine.png"], difficulty: "boss", line: "IA locale. Sourire inquiétant." }
   ];
 
@@ -37,7 +37,7 @@
     emilie: { shortProfile: "instinct vertical", profile: "instinct vertical", quote: "Déjà au point suivant." },
     pierre: { shortProfile: "patience armée", profile: "patience armée", quote: "Ce rebond est une feature." },
     mathilde: { shortProfile: "chaos lisible", profile: "chaos lisible", quote: "Lecture du jeu aux rayons X" },
-    benjamain: { shortProfile: "focus fragile", profile: "focus fragile", quote: "Service en profondeur." }
+    benjamain: { shortProfile: "focus fragile", profile: "focus fragile", quote: "La précision chirurgicale, mais avec une raquette." }
   };
 
   const LOSER_COMMENTS = [
