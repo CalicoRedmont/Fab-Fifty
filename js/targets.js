@@ -2,15 +2,15 @@
   "use strict";
 
   const PLAYERS = [
-    { id: "fabien", name: "Fabien", initials: "FA", files: ["Fabien.jpg", "Fabien-px.png"], difficulty: "normal", line: "Le service est une opinion." },
-    { id: "carole", name: "Carole", initials: "CA", files: ["Carole.jpg", "Carole-px.png"], difficulty: "normal", line: "Calme votre fièvre de victoire." },
-    { id: "lucile", name: "Lucile", initials: "LU", files: ["Lucile.jpg", "Lucile-px.png", "Lucile-1.png"], difficulty: "hard", line: "S'entraîne en bibliothèque." },
+    { id: "fabien", name: "Fabien", initials: "FA", files: ["Fabien.jpg", "Fabien-px.png"], difficulty: "normal", line: "La victoire, comme la défaite, sont des opinions discutables." },
+    { id: "carole", name: "Carole", initials: "CA", files: ["Carole.jpg", "Carole-px.png"], difficulty: "normal", line: "La fièvre de victoire se soigne." },
+    { id: "lucile", name: "Lucile", initials: "LU", files: ["Lucile.jpg", "Lucile-px.png", "Lucile-1.png"], difficulty: "hard", line: "A étudié le bad en bibliothèque." },
     { id: "manu", name: "Manu", initials: "MA", files: ["Manu.jpg", "Manu-px.png", "Manu.png"], difficulty: "normal", line: "Son jeu défie la gravité." },
     { id: "elsie", name: "Elsie", initials: "EL", files: ["Elsie.jpg", "Elsie-px.png"], difficulty: "hard", line: "Style + revers lifté." },
     { id: "stephane", name: "Stéphane", initials: "ST", files: ["Stephane.jpg", "Stephane-px.png", "Stephane.png", "Stéphane-px.png"], difficulty: "hard", line: "Coup droit électrique en mode solo." },
     { id: "cecile", name: "Cécile", initials: "CE", files: ["Cecile.jpg", "Cecile-px.png", "Cécile-px.png"], difficulty: "normal", line: "Toucher en mi mineur." },
     { id: "guillaume", name: "Guillaume", initials: "GU", files: ["Guillaume.jpg", "Guillaume-px.png"], difficulty: "normal", line: "De la cuisse et un jeu fluide." },
-    { id: "camille", name: "Camille", initials: "CM", files: ["Camille.jpg", "Camille-px.png"], difficulty: "normal", line: "Le volant suit une idée à lui." },
+    { id: "camille", name: "Camille", initials: "CM", files: ["Camille.jpg", "Camille-px.png"], difficulty: "normal", line: "Le volant suit sa propre voie, et cela se respecte." },
     { id: "olivierr", name: "Olivier R.", initials: "OR", files: ["Olivier.R.jpg", "Olivier-H-px.png", "Olivier.png"], difficulty: "normal", line: "Son service vous dessert" },
     { id: "laureanne", name: "Laure-Anne", initials: "LA", files: ["Laure-Anne.jpg", "Laure-Anne-px.png", "Laure-Anne.png", "LAV-1.png", "LAV-2.png"], difficulty: "hard", line: "Le volant hésite aussi." },
     { id: "olivierd", name: "Olivier D.", initials: "OD", files: ["Olivier.D.jpg", "Olivier-D-px.png"], difficulty: "normal", line: "Forfait le dimanche matin." },
@@ -22,15 +22,15 @@
   ];
 
   const PLAYER_FLAVOR_PROFILES = {
-    fabien: { shortProfile: "service subjectif", profile: "service subjectif", quote: "Le service est une opinion." },
-    carole: { shortProfile: "calme suspect", profile: "calme suspect", quote: "Calme votre fièvre de victoire." },
-    lucile: { shortProfile: "trajectoire libre", profile: "trajectoire libre", quote: "S'entraîne en bibliothèque." },
+    fabien: { shortProfile: "service subjectif", profile: "service subjectif", quote: "La victoire, comme la défaite, sont des opinions discutables." },
+    carole: { shortProfile: "calme suspect", profile: "calme suspect", quote: "La fièvre de victoire se soigne." },
+    lucile: { shortProfile: "trajectoire libre", profile: "trajectoire libre", quote: "A étudié le bad en bibliothèque." },
     manu: { shortProfile: "réflexe tardif", profile: "réflexe tardif mais sincère", quote: "Son jeu défie la gravité." },
     elsie: { shortProfile: "pression douce", profile: "pression douce", quote: "Style + revers lifté." },
     stephane: { shortProfile: "angle discutable", profile: "angle discutable", quote: "Coup droit électrique en mode solo." },
     cecile: { shortProfile: "précision floue", profile: "précision floue", quote: "Toucher en mi mineur." },
     guillaume: { shortProfile: "panache dense", profile: "panache dense", quote: "De la cuisse et un jeu fluide." },
-    camille: { shortProfile: "tempo souple", profile: "tempo souple", quote: "Le volant suit une idée à lui." },
+    camille: { shortProfile: "tempo souple", profile: "tempo souple", quote: "Le volant suit sa propre voie, et cela se respecte." },
     olivierr: { shortProfile: "revers administratif", profile: "revers administratif", quote: "Son service vous dessert" },
     laureanne: { shortProfile: "élan précis", profile: "élan précis", quote: "Le volant hésite aussi." },
     olivierd: { shortProfile: "attaque polie", profile: "attaque polie", quote: "Forfait le dimanche matin." },
@@ -159,6 +159,7 @@
   const TITLE_TAGLINE = "En vert et contre tous";
   const PAUSE_TAGLINE = "Le jeu régressif qui te rend vert";
   const MODE_ANNIVERSAIRE_FABIEN = true;
+  const ENABLE_WARGAME = true;
 
   const AI_DIFFICULTIES = {
     easy: { label: "EASY", speed: 190, reaction: 0.44, error: 96, description: "La Machine cligne des pixels." },
@@ -263,6 +264,7 @@
     TITLE_TAGLINE,
     PAUSE_TAGLINE,
     MODE_ANNIVERSAIRE_FABIEN,
+    ENABLE_WARGAME,
     AI_DIFFICULTIES,
     AI_DIFFICULTY_IDS,
     MATCH_MODES,

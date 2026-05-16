@@ -98,6 +98,7 @@
     booted = true;
 
     window.installScreens(window.Game);
+    if (window.installWargame) window.installWargame(window.Game);
 
     const canvas = document.getElementById("game");
     const game = new window.Game(canvas);

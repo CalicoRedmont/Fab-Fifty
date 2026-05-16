@@ -331,12 +331,18 @@
           ? "Choisis ton joueur. La Machine sera forcément à droite."
           : "Choisis un joueur. Entrée valide. Échap menu.";
       this.drawText(help, 54, 98, 14, this.colors.white);
-      this.drawPlayerGrid(entries, this.playerCursor, 54, 120, 4, 132, 70);
+      const grid = { x: 54, y: 120, cols: 4, tileW: 132, tileH: 70, gapY: 10 };
+      const rows = Math.max(1, Math.ceil(entries.length / grid.cols));
+      const gridH = rows * grid.tileH + (rows - 1) * grid.gapY;
+      const side = { x: 620, y: grid.y, w: 278 };
+      const machineH = grid.tileH;
+      const selectedH = this.flow === "solo" ? gridH - grid.gapY - machineH : gridH;
+      this.drawPlayerGrid(entries, this.playerCursor, grid.x, grid.y, grid.cols, grid.tileW, grid.tileH);
       const picked = entries[this.playerCursor] || entries[0];
-      this.drawSelectedCard(picked, 620, 122, 278, 330);
-      if (this.flow === "solo") this.drawSoloMachineOpponent(620, 456, 278, 66);
+      this.drawSelectedCard(picked, side.x, side.y, side.w, selectedH);
+      if (this.flow === "solo") this.drawSoloMachineOpponent(side.x, side.y + selectedH + grid.gapY, side.w, machineH);
       this.drawScanlines();
-      this.drawPlayerGridNames(entries, this.playerCursor, 54, 120, 4, 132, 70);
+      this.drawPlayerGridNames(entries, this.playerCursor, grid.x, grid.y, grid.cols, grid.tileW, grid.tileH);
     };
 
     Game.prototype.drawOpponentSelect = function () {
@@ -840,11 +846,20 @@
       if (player.id === "start") return this.drawStartCard(x, y, w, h);
       const flavor = CFG.playerFlavorProfile ? CFG.playerFlavorProfile(player) : null;
       const quote = flavor ? flavor.quote : (player.line || "Placeholder prêt pour portrait futur.");
+      const compact = h < 280;
+      const portraitSize = compact ? 126 : 156;
+      const portraitY = compact ? y + 16 : y + 24;
+      const nameY = compact ? y + 170 : y + 218;
+      const labelSize = label ? (compact ? 20 : 23) : (compact ? 23 : 26);
+      const detailY = compact ? y + 194 : y + 246;
+      const quoteY = compact ? y + 180 : y + 248;
+      const quoteInset = compact ? 28 : 34;
+      const quoteLineH = compact ? 17 : 20;
       this.panel(x, y, w, h, 0.78);
-      this.drawPortrait(player, x + (w - 156) / 2, y + 24, 156, 156, true);
-      this.neon(label || player.name, x + w / 2, y + 218, label ? 23 : 26, this.colors.green, "center");
-      if (label) this.drawText(player.name, x + w / 2, y + 246, 17, this.colors.amber, "center");
-      this.wrapText(quote, x + 34, y + 288, w - 68, 20, this.colors.amber, "center");
+      this.drawPortrait(player, x + (w - portraitSize) / 2, portraitY, portraitSize, portraitSize, true);
+      this.neon(label || player.name, x + w / 2, nameY, labelSize, this.colors.green, "center");
+      if (label) this.drawText(player.name, x + w / 2, detailY, compact ? 15 : 17, this.colors.amber, "center");
+      this.wrapText(quote, x + quoteInset, quoteY, w - quoteInset * 2, quoteLineH, this.colors.amber, "center");
     };
 
     Game.prototype.drawSoloMachineOpponent = function (x, y, w, h) {
