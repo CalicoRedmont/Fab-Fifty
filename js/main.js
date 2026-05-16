@@ -45,20 +45,26 @@
     const error = document.getElementById("accessError");
 
     if (!gate || !form || !input) {
+      setCurrentPlayerName("Fabien");
       bootGame();
       return;
     }
 
     form.addEventListener("submit", event => {
       event.preventDefault();
-      if (isWarGamePassword(input.value)) {
+      const password = input.value;
+      const playerName = resolveAccessPlayerName(password);
+
+      if (isWarGamePassword(password)) {
         pendingBootMode = "wargame";
-      } else if (!isAllowedPassword(input.value)) {
+        setCurrentPlayerName(playerName || "Fabien");
+      } else if (!playerName) {
         if (error) error.textContent = "Mot de passe incorrect.";
         input.select();
         return;
       } else {
         pendingBootMode = "title";
+        setCurrentPlayerName(playerName);
       }
 
       document.body.classList.remove("access-locked");
@@ -76,7 +82,7 @@
   }
 
   function isAllowedPassword(value) {
-    return getAllowedPasswords().has(normalizePassword(value));
+    return !!resolveAccessPlayerName(value);
   }
 
   function isWarGamePassword(value) {
@@ -95,6 +101,24 @@
     });
 
     return passwords;
+  }
+
+  function resolveAccessPlayerName(value) {
+    const password = normalizePassword(value);
+    const players = (window.BadPongConfig && window.BadPongConfig.PLAYERS) || [];
+    const player = players.find(candidate => {
+      if (!candidate || candidate.id === "machine") return false;
+      return normalizePassword(playerFirstName(candidate.name)) === password;
+    });
+    if (player) return playerFirstName(player.name) || player.name;
+
+    return FALLBACK_PLAYER_FIRST_NAMES.find(name => normalizePassword(name) === password) || "";
+  }
+
+  function setCurrentPlayerName(name) {
+    const playerName = String(name || "Fabien").trim() || "Fabien";
+    window.BadPongCurrentPlayerName = playerName;
+    window.BadPongSession = Object.assign({}, window.BadPongSession, { playerName });
   }
 
   function playerFirstName(name) {

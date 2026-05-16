@@ -750,8 +750,15 @@
       ctx.restore();
     };
 
+    Game.prototype.warGameVictoryPlayerName = function () {
+      const session = window.BadPongSession || {};
+      const playerName = String(session.playerName || window.BadPongCurrentPlayerName || "Fabien").trim();
+      return playerName || "Fabien";
+    };
+
     Game.prototype.drawWarGameVictory = function () {
       const ctx = this.ctx;
+      const playerName = this.warGameVictoryPlayerName();
       ctx.save();
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, this.width, this.height);
@@ -760,7 +767,8 @@
       this.drawText("GLOBAL STRIKE ABORTED", 480, 232, 23, this.colors.white, "center");
       this.drawText("HUMANITY STATUS: DAMAGED BUT ALIVE", 480, 272, 19, this.colors.amber, "center");
       this.neon("MISSION COMPLETE", 480, 330, 42, this.colors.green, "center");
-      this.drawText("ENTRÉE OU ESPACE : RETOUR TITRE", 480, 420, 14, this.colors.white, "center");
+      this.drawText(`${playerName} a sauvé l'humanité. Merci.`, 480, 382, 18, this.colors.white, "center");
+      this.drawText("ENTRÉE OU ESPACE : RETOUR TITRE", 480, 438, 14, this.colors.white, "center");
       this.drawWarScanlines();
       ctx.restore();
     };
