@@ -28,6 +28,7 @@
     "Enter"
   ]);
   let booted = false;
+  let pendingBootMode = "title";
 
   setupAccessGate();
 
@@ -50,10 +51,14 @@
 
     form.addEventListener("submit", event => {
       event.preventDefault();
-      if (!isAllowedPassword(input.value)) {
+      if (isWarGamePassword(input.value)) {
+        pendingBootMode = "wargame";
+      } else if (!isAllowedPassword(input.value)) {
         if (error) error.textContent = "Mot de passe incorrect.";
         input.select();
         return;
+      } else {
+        pendingBootMode = "title";
       }
 
       document.body.classList.remove("access-locked");
@@ -72,6 +77,11 @@
 
   function isAllowedPassword(value) {
     return getAllowedPasswords().has(normalizePassword(value));
+  }
+
+  function isWarGamePassword(value) {
+    const config = window.BadPongConfig || {};
+    return config.ENABLE_WARGAME && normalizePassword(value) === "wargame";
   }
 
   function getAllowedPasswords() {
@@ -102,6 +112,7 @@
 
     const canvas = document.getElementById("game");
     const game = new window.Game(canvas);
+    if (pendingBootMode === "wargame" && game.startWarGameBoot) game.startWarGameBoot();
     let last = performance.now();
 
     window.addEventListener("keydown", event => {
