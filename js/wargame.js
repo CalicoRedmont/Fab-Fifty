@@ -10,8 +10,8 @@
     "LOADING WARGAME.EXE"
   ];
   const WAR_OLIVIER_PILOTS = [
-    { playerId: "olivierr", displayName: "OLIVIER R.", callsign: "OLIVIER-R" },
-    { playerId: "olivierd", displayName: "OLIVIER D.", callsign: "OLIVIER-D" }
+    { playerId: "olivierd", displayName: "OLIVIER D.", callsign: "OLIVIER-D" },
+    { playerId: "olivierr", displayName: "OLIVIER R.", callsign: "OLIVIER-R" }
   ];
   const WAR = {
     bootLineDelay: 0.68,
@@ -169,7 +169,7 @@
         rapidCooldown: 0,
         heavyCooldown: 0,
         explosions: [],
-        selectedPilot: this.wargamePilotOverride ? Object.assign({}, this.wargamePilotOverride) : null,
+        selectedPilot: this.resolveWarGameSelectedPilot(),
         lastStatus: "SANCTUARY ONLINE: MONTROUGE",
         lastStatusDetail: "",
         machineGlitch: 0,
@@ -519,21 +519,30 @@
       ctx.fillRect(0, 0, this.width, this.height);
       this.drawWarConsoleGrid(0.18);
       this.drawWarGlitch(this.wargame ? this.wargame.glitch : 0);
-      this.panel(232, 86, 496, 318, 0.72);
-      this.drawText("IDENTITY CHECK", 480, 132, 19, this.colors.green, "center");
-      this.drawText("PASSWORD: OLIVIER", 480, 164, 16, this.colors.white, "center");
-      this.neon("DE QUEL OLIVIER S'AGIT-IL ?", 480, 218, 22, this.colors.green, "center");
+      this.panel(176, 64, 608, 392, 0.72);
+      this.drawText("IDENTITY CHECK", 480, 108, 19, this.colors.green, "center");
+      this.drawText("PASSWORD: OLIVIER", 480, 138, 16, this.colors.white, "center");
+      this.neon("DE QUEL OLIVIER S'AGIT-IL ?", 480, 184, 22, this.colors.green, "center");
       WAR_OLIVIER_PILOTS.forEach((pilot, index) => {
-        const y = 270 + index * 42;
+        const x = 246 + index * 244;
+        const y = 226;
+        const player = this.warGamePilotById(pilot.playerId);
         const active = index === selected;
         if (active) {
           ctx.fillStyle = "rgba(57,255,104,0.13)";
-          ctx.fillRect(318, y - 27, 324, 34);
-          if (Math.floor(performance.now() / 180) % 2 === 0) this.drawText(">", 300, y, 20, this.colors.amber);
+          ctx.fillRect(x - 18, y - 20, 196, 156);
+          ctx.strokeStyle = this.colors.amber;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x - 18, y - 20, 196, 156);
+          if (Math.floor(performance.now() / 180) % 2 === 0) this.drawText(">", x - 42, y + 58, 22, this.colors.amber);
         }
-        this.drawText(`[${index + 1}] ${pilot.displayName}`, 338, y, active ? 20 : 18, active ? this.colors.amber : this.colors.green);
+        if (!this.drawWarPhotoPortrait(player, x, y, 116, 116, active ? this.colors.amber : this.colors.green)) {
+          this.drawWarPilotPortrait(player, x, y, 116, 116);
+        }
+        this.drawText(`[${index + 1}] ${pilot.displayName}`, x + 58, y + 142, active ? 18 : 16, active ? this.colors.amber : this.colors.green, "center");
+        this.drawText(pilot.callsign, x + 58, y + 166, 12, this.colors.white, "center");
       });
-      this.drawText("SELECT PILOT ID", 480, 378, 14, this.colors.white, "center");
+      this.drawText("SELECT PILOT ID: 1 OU 2", 480, 424, 14, this.colors.white, "center");
       this.drawWarScanlines();
       ctx.restore();
     };
@@ -882,17 +891,42 @@
       const players = CFG.PLAYERS || [];
       const selectedPilot = this.wargame && this.wargame.selectedPilot;
       if (selectedPilot && selectedPilot.playerId) {
-        return (CFG.playerById && CFG.playerById(selectedPilot.playerId))
-          || players.find(player => player.id === selectedPilot.playerId)
-          || null;
+        return this.warGamePilotById(selectedPilot.playerId);
       }
       const session = window.BadPongSession || {};
+      if (session.playerId) {
+        const sessionPilot = this.warGamePilotById(session.playerId);
+        if (sessionPilot) return sessionPilot;
+      }
       const playerName = String(session.playerName || window.BadPongCurrentPlayerName || "Fabien").trim();
       const normalizedName = normalizeWarName(warFirstName(playerName));
       return players.find(player => player.id !== "machine" && normalizeWarName(warFirstName(player.name)) === normalizedName)
         || (CFG.playerById && CFG.playerById("fabien"))
         || players.find(player => player.id !== "machine")
         || null;
+    };
+
+    Game.prototype.warGamePilotById = function (playerId) {
+      const players = CFG.PLAYERS || [];
+      if (!playerId) return null;
+      const player = (CFG.playerById && CFG.playerById(playerId))
+        || players.find(candidate => candidate.id === playerId)
+        || null;
+      return player && player.id !== "machine" ? player : null;
+    };
+
+    Game.prototype.resolveWarGameSelectedPilot = function () {
+      if (this.wargamePilotOverride) return Object.assign({}, this.wargamePilotOverride);
+      const session = window.BadPongSession || {};
+      const player = this.warGamePilotById(session.playerId);
+      if (!player) return null;
+      const displayName = String(session.pilotDisplayName || player.name || session.playerName || "UNKNOWN").trim();
+      const callsign = String(session.pilotCallsign || displayName.replace(/[.\s]+/g, "-").replace(/-+$/g, "")).trim();
+      return {
+        playerId: player.id,
+        displayName: displayName.toUpperCase() || "UNKNOWN",
+        callsign: callsign.toUpperCase() || "UNKNOWN"
+      };
     };
 
     Game.prototype.drawWarPilotPortrait = function (player, x, y, w, h) {
@@ -1043,6 +1077,8 @@
     };
 
     Game.prototype.warGameVictoryPlayerName = function () {
+      const selectedPilot = this.wargame && this.wargame.selectedPilot;
+      if (selectedPilot && selectedPilot.displayName) return selectedPilot.displayName;
       const session = window.BadPongSession || {};
       const playerName = String(session.playerName || window.BadPongCurrentPlayerName || "Fabien").trim();
       return playerName || "Fabien";

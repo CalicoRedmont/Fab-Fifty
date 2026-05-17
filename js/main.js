@@ -18,6 +18,10 @@
     "Mathilde",
     "Benjamin"
   ];
+  const OLIVIER_ACCESS_PILOTS = [
+    { key: "1", playerId: "olivierd", displayName: "OLIVIER D.", callsign: "OLIVIER-D" },
+    { key: "2", playerId: "olivierr", displayName: "OLIVIER R.", callsign: "OLIVIER-R" }
+  ];
   const preventKeys = new Set([
     "ArrowUp",
     "ArrowDown",
@@ -55,6 +59,11 @@
       const password = input.value;
       const playerName = resolveAccessPlayerName(password);
 
+      if (isOlivierWarGamePassword(password)) {
+        showOlivierPilotSelect(gate, form);
+        return;
+      }
+
       if (isWarGamePassword(password)) {
         pendingBootMode = "wargame";
         setCurrentPlayerName(playerName || "Fabien");
@@ -90,6 +99,11 @@
     return config.ENABLE_WARGAME && normalizePassword(value) === "wargame";
   }
 
+  function isOlivierWarGamePassword(value) {
+    const config = window.BadPongConfig || {};
+    return config.ENABLE_WARGAME && normalizePassword(value) === "olivier";
+  }
+
   function getAllowedPasswords() {
     const passwords = new Set(FALLBACK_PLAYER_FIRST_NAMES.map(normalizePassword));
     const players = (window.BadPongConfig && window.BadPongConfig.PLAYERS) || [];
@@ -115,10 +129,130 @@
     return FALLBACK_PLAYER_FIRST_NAMES.find(name => normalizePassword(name) === password) || "";
   }
 
-  function setCurrentPlayerName(name) {
+  function showOlivierPilotSelect(gate, form) {
+    const pilots = getOlivierAccessPilots();
+    injectOlivierAccessStyles();
+    form.classList.add("olivier-select-panel");
+    form.innerHTML = `
+      <p class="access-kicker">IDENTITY CHECK</p>
+      <h1>DE QUEL OLIVIER S'AGIT-IL ?</h1>
+      <p class="access-tagline">PASSWORD: OLIVIER</p>
+      <div class="olivier-choice-grid">
+        ${pilots.map((pilot, index) => `
+          <button class="olivier-choice" type="button" data-olivier-index="${index}">
+            <span class="olivier-choice-key">[${pilot.key}]</span>
+            <img src="${pilot.imageSrc}" alt="${pilot.displayName}">
+            <strong>${pilot.displayName}</strong>
+            <span>CALLSIGN: ${pilot.callsign}</span>
+          </button>
+        `).join("")}
+      </div>
+      <p class="access-error" role="status" aria-live="polite">SELECT PILOT ID: 1 OU 2</p>
+    `;
+    form.querySelectorAll("[data-olivier-index]").forEach(button => {
+      button.addEventListener("click", () => selectOlivierAccessPilot(gate, pilots[Number(button.dataset.olivierIndex)]));
+    });
+    form.addEventListener("keydown", event => {
+      if (event.key === "1") selectOlivierAccessPilot(gate, pilots[0]);
+      if (event.key === "2") selectOlivierAccessPilot(gate, pilots[1]);
+    });
+    form.tabIndex = -1;
+    form.focus();
+  }
+
+  function selectOlivierAccessPilot(gate, pilot) {
+    if (!pilot) return;
+    pendingBootMode = "wargame";
+    setCurrentPlayerName(pilot.playerName, {
+      playerId: pilot.playerId,
+      pilotDisplayName: pilot.displayName,
+      pilotCallsign: pilot.callsign
+    });
+    document.body.classList.remove("access-locked");
+    gate.remove();
+    bootGame();
+  }
+
+  function getOlivierAccessPilots() {
+    const config = window.BadPongConfig || {};
+    const players = config.PLAYERS || [];
+    return OLIVIER_ACCESS_PILOTS.map(pilot => {
+      const player = (config.playerById && config.playerById(pilot.playerId))
+        || players.find(candidate => candidate.id === pilot.playerId)
+        || {};
+      const file = player.files && player.files[0] ? player.files[0] : "";
+      return Object.assign({}, pilot, {
+        playerName: player.name || pilot.displayName,
+        imageSrc: file ? `assets/images/${file}` : ""
+      });
+    });
+  }
+
+  function injectOlivierAccessStyles() {
+    if (document.getElementById("olivierAccessStyles")) return;
+    const style = document.createElement("style");
+    style.id = "olivierAccessStyles";
+    style.textContent = `
+      .access-panel.olivier-select-panel {
+        width: min(760px, calc(100vw - 28px));
+        max-width: 760px;
+      }
+      .olivier-choice-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin: 22px 0 14px;
+      }
+      .olivier-choice {
+        appearance: none;
+        border: 2px solid rgba(57, 255, 104, 0.65);
+        background: rgba(0, 0, 0, 0.78);
+        color: #39ff68;
+        cursor: pointer;
+        display: grid;
+        gap: 8px;
+        font: inherit;
+        letter-spacing: 0;
+        min-height: 220px;
+        padding: 12px;
+        text-align: left;
+        text-transform: uppercase;
+      }
+      .olivier-choice:hover,
+      .olivier-choice:focus {
+        border-color: #f7d56b;
+        box-shadow: 0 0 18px rgba(57, 255, 104, 0.35);
+        outline: none;
+      }
+      .olivier-choice img {
+        aspect-ratio: 1;
+        border: 1px solid rgba(57, 255, 104, 0.5);
+        filter: grayscale(1) contrast(1.25) sepia(1) hue-rotate(58deg) saturate(3);
+        image-rendering: pixelated;
+        object-fit: cover;
+        width: 100%;
+      }
+      .olivier-choice-key {
+        color: #f7d56b;
+      }
+      @media (max-width: 620px) {
+        .olivier-choice-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function setCurrentPlayerName(name, details = {}) {
     const playerName = String(name || "Fabien").trim() || "Fabien";
     window.BadPongCurrentPlayerName = playerName;
-    window.BadPongSession = Object.assign({}, window.BadPongSession, { playerName });
+    window.BadPongSession = Object.assign({}, window.BadPongSession, {
+      playerName,
+      playerId: details.playerId || "",
+      pilotDisplayName: details.pilotDisplayName || "",
+      pilotCallsign: details.pilotCallsign || ""
+    });
   }
 
   function playerFirstName(name) {
