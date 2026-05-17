@@ -61,7 +61,10 @@
 
     Game.prototype.update = function (dt) {
       const safeDt = Math.min(0.033, dt);
-      if (this.screen === "wargameOlivierSelect") return;
+      if (this.screen === "wargameOlivierSelect") {
+        if (this.wargame) this.wargame.glitch = Math.max(0, this.wargame.glitch - safeDt);
+        return;
+      }
       if (this.screen === "wargameBoot") return this.updateWarGameBoot(safeDt);
       if (this.screen === "wargame") return this.updateWarGame(safeDt);
       return baseUpdate.call(this, dt);
@@ -1166,10 +1169,16 @@
       .toLowerCase();
   }
 
-  function formatWarPilotName(player) {
-    const name = warFirstName(player && player.name) || "Fabien";
+  function formatWarPilotName(player, selectedPilot) {
+    const name = (selectedPilot && selectedPilot.displayName) || warFirstName(player && player.name) || "Fabien";
     const label = name.trim().toUpperCase() || "UNKNOWN";
     return label.length > 16 ? `${label.slice(0, 15)}~` : label;
+  }
+
+  function formatWarPilotCallsign(player, selectedPilot) {
+    const callsign = (selectedPilot && selectedPilot.callsign) || formatWarPilotName(player, null);
+    const label = callsign.trim().toUpperCase() || "UNKNOWN";
+    return label.length > 18 ? `${label.slice(0, 17)}~` : label;
   }
 
   function randomItem(list) {
