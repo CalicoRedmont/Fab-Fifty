@@ -20,6 +20,7 @@
     standardSpawnBase: 2.15,
     hunterSpawnBase: 7.8,
     humanityLoss: 14,
+    sanctuaryHumanityLoss: 25,
     coreHp: 6
   };
 
@@ -88,6 +89,7 @@
     Game.prototype.resetWarGameState = function () {
       const cities = [
         { name: "Paris", x: 472, y: 226, active: true, lost: false },
+        { id: "montrouge", name: "Montrouge", displayName: "SANCTUARY: MONTROUGE", x: 490, y: 250, active: true, lost: false, type: "sanctuary" },
         { name: "New York", x: 245, y: 235, active: true, lost: false },
         { name: "Tokyo", x: 756, y: 260, active: true, lost: false },
         { name: "Sydney", x: 792, y: 398, active: true, lost: false },
@@ -134,7 +136,9 @@
         rapidCooldown: 0,
         heavyCooldown: 0,
         explosions: [],
-        lastStatus: "GLOBAL DEFENSE",
+        lastStatus: "SANCTUARY ONLINE: MONTROUGE",
+        lastStatusDetail: "",
+        machineGlitch: 0,
         returningToTitle: false,
         glitch: 0
       };
@@ -189,6 +193,7 @@
       state.heavyCooldown = Math.max(0, state.heavyCooldown - dt);
       state.playerAircraft.fireFlash = Math.max(0, state.playerAircraft.fireFlash - dt);
       state.glitch = Math.max(0, state.glitch - dt);
+      state.machineGlitch = Math.max(0, state.machineGlitch - dt);
 
       this.updateWarGamePlayer(dt);
       if (this.key(" ")) this.fireWarGameRapidShot();
@@ -253,6 +258,10 @@
         ? state.playerAircraft
         : randomItem(state.cities.filter(city => city.active));
       if (!target) return;
+      if (type === "standard" && isWarSanctuary(target)) {
+        state.lastStatus = "MACHINE: SANCTUARY TARGETED";
+        state.lastStatusDetail = "";
+      }
 
       const speed = type === "hunter"
         ? 118 + Math.min(58, state.time * 0.35)
@@ -266,7 +275,7 @@
         prevY: source.y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        targetName: target.name || "PEACEKEEPER-50",
+        targetName: target.displayName || target.name || "PEACEKEEPER-50",
         target,
         r: type === "hunter" ? 6 : 5,
         life: 12
@@ -313,6 +322,7 @@
       p.fireFlash = 0.18;
       state.heavyCooldown = WAR.heavyCooldown;
       state.lastStatus = `HEAVY MISSILE -> ${target.name}`;
+      state.lastStatusDetail = "";
       this.audio.play("validate");
     };
 
@@ -346,6 +356,7 @@
           state.enemyMissiles.splice(j, 1);
           state.playerShots.splice(i, 1);
           state.lastStatus = "MISSILE INTERCEPTED";
+          state.lastStatusDetail = "";
           this.audio.play("destroy");
           break;
         }
@@ -363,6 +374,8 @@
         this.addWarExplosion(target.x, target.y, this.colors.amber, 16);
         state.heavyMissiles.splice(i, 1);
         state.lastStatus = `${target.name} DAMAGED`;
+        state.lastStatusDetail = "";
+        state.machineGlitch = 0.34;
         this.audio.play(target.hp <= 0 ? "win" : "destroy");
         if (target.hp <= 0) {
           target.destroyed = true;
@@ -384,12 +397,16 @@
           return;
         }
         if (missile.type === "standard" && missile.target && missile.target.active && warCircleHit(missile, missile.target, missile.r + 8)) {
-          missile.target.active = false;
-          missile.target.lost = true;
-          state.humanity = Math.max(0, state.humanity - WAR.humanityLoss);
+          const target = missile.target;
+          const sanctuary = isWarSanctuary(target);
+          const humanityLoss = sanctuary ? WAR.sanctuaryHumanityLoss : WAR.humanityLoss;
+          target.active = false;
+          target.lost = true;
+          state.humanity = Math.max(0, state.humanity - humanityLoss);
           state.enemyMissiles.splice(i, 1);
-          state.lastStatus = `${missile.target.name.toUpperCase()} LOST`;
-          this.addWarExplosion(missile.target.x, missile.target.y, this.colors.red, 18);
+          state.lastStatus = sanctuary ? "SANCTUARY BREACHED: MONTROUGE" : `${target.name.toUpperCase()} LOST`;
+          state.lastStatusDetail = sanctuary ? `HUMANITY -${WAR.sanctuaryHumanityLoss}%` : "";
+          this.addWarExplosion(target.x, target.y, this.colors.red, sanctuary ? 24 : 18);
           this.audio.play("lose");
         }
       }
@@ -502,16 +519,31 @@
       const ctx = this.ctx;
       for (const city of this.wargame.cities) {
         ctx.save();
+        const sanctuary = isWarSanctuary(city);
+        const label = city.displayName || city.name;
+        const pulse = 0.55 + Math.sin(performance.now() / 150) * 0.45;
         const color = city.active ? this.colors.green : this.colors.red;
         ctx.strokeStyle = color;
         ctx.fillStyle = city.active ? "rgba(57,255,104,0.22)" : "rgba(255,56,85,0.20)";
         ctx.shadowColor = color;
-        ctx.shadowBlur = city.active ? 8 : 12;
+        ctx.shadowBlur = sanctuary && city.active ? 18 : city.active ? 8 : 12;
+        if (sanctuary && city.active) {
+          ctx.globalAlpha = 0.5 + pulse * 0.38;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(city.x, city.y, 13 + pulse * 2, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(city.x, city.y, 19 + pulse * 2, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.strokeRect(city.x - 7, city.y - 7, 14, 14);
+        }
         ctx.beginPath();
-        ctx.arc(city.x, city.y, city.active ? 5 : 7, 0, Math.PI * 2);
+        ctx.arc(city.x, city.y, city.active ? sanctuary ? 6 : 5 : 7, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        this.drawText(city.lost ? `${city.name} LOST` : city.name, city.x + 10, city.y - 8, 10, color);
+        this.drawText(city.lost ? `${label} LOST` : label, city.x + 10, city.y + (sanctuary ? 20 : -8), sanctuary ? 9 : 10, color);
         ctx.restore();
       }
     };
@@ -717,22 +749,177 @@
 
     Game.prototype.drawWarHud = function () {
       const state = this.wargame;
+      const pilot = this.warGamePilotPlayer();
+      const machine = CFG.playerById ? CFG.playerById("machine") : null;
+      const pilotName = formatWarPilotName(pilot);
       const lost = state.cities.filter(city => !city.active).length;
       const corePct = Math.max(0, Math.round((state.machineCore.hp / state.machineCore.maxHp) * 100));
-      this.panel(22, 20, 298, 160, 0.62);
+      this.panel(22, 20, 312, 166, 0.62);
       this.drawText("WARGAME.EXE", 40, 48, 18, this.colors.green);
-      this.drawText("PILOT: UN-50", 40, 72, 12, this.colors.white);
-      this.drawText("CALLSIGN: FABIEN", 40, 92, 12, this.colors.white);
-      this.drawText("AIRCRAFT: PEACEKEEPER-50", 40, 112, 12, this.colors.white);
-      this.drawText(`HUMANITY: ${Math.round(state.humanity)}%`, 40, 136, 12, this.colors.amber);
-      this.drawText(`CITIES LOST: ${lost} / ${state.cities.length}`, 40, 156, 12, lost ? this.colors.red : this.colors.green);
+      this.drawWarPilotPortrait(pilot, 40, 60, 74, 72);
+      this.drawText("PILOT", 128, 72, 11, this.colors.amber);
+      this.drawText(pilotName, 128, 92, 15, this.colors.white);
+      this.drawText(`CALLSIGN: ${pilotName}`, 128, 112, 11, this.colors.white);
+      this.drawText("AIRCRAFT: PEACEKEEPER-50", 128, 132, 11, this.colors.white);
+      this.drawText(`HUMANITY: ${Math.round(state.humanity)}%`, 40, 158, 12, this.colors.amber);
+      this.drawText(`CITIES LOST: ${lost} / ${state.cities.length}`, 178, 158, 12, lost ? this.colors.red : this.colors.green);
+
+      this.panel(352, 20, 256, 72, 0.58);
+      this.drawText("WAR CONSOLE", 370, 42, 12, this.colors.white);
+      this.drawText(state.lastStatus, 370, 64, 10, this.colors.green);
+      if (state.lastStatusDetail) this.drawText(state.lastStatusDetail, 370, 84, 10, this.colors.amber);
 
       this.panel(646, 20, 292, 112, 0.58);
-      this.drawText(`MACHINE CORE: ${corePct}%`, 664, 51, 13, corePct <= 30 ? this.colors.red : this.colors.amber);
-      this.drawText(`STATUS: ${state.lastStatus}`, 664, 76, 11, this.colors.green);
-      this.drawText(`HEAVY: ${state.heavyCooldown <= 0 ? "READY" : `${state.heavyCooldown.toFixed(1)}S`}`, 664, 100, 11, this.colors.white);
+      this.drawWarMachinePortrait(machine, 846, 42, 70, 70, corePct);
+      this.drawText("MACHINE", 664, 51, 15, this.colors.red);
+      this.drawText("STATUS: ACTIVE", 664, 75, 11, this.colors.green);
+      this.drawText(`CORE: ${corePct}%`, 664, 99, 12, corePct <= 30 ? this.colors.red : this.colors.amber);
+      this.drawText(`HEAVY: ${state.heavyCooldown <= 0 ? "READY" : `${state.heavyCooldown.toFixed(1)}S`}`, 664, 123, 11, this.colors.white);
 
       this.drawText("ARROWS/ZQSD MOVE   SPACE FIRE   X/CTRL HEAVY   ESC TITLE", 480, 520, 11, this.colors.green, "center");
+    };
+
+    Game.prototype.warGamePilotPlayer = function () {
+      const players = CFG.PLAYERS || [];
+      const session = window.BadPongSession || {};
+      const playerName = String(session.playerName || window.BadPongCurrentPlayerName || "Fabien").trim();
+      const normalizedName = normalizeWarName(warFirstName(playerName));
+      return players.find(player => player.id !== "machine" && normalizeWarName(warFirstName(player.name)) === normalizedName)
+        || (CFG.playerById && CFG.playerById("fabien"))
+        || players.find(player => player.id !== "machine")
+        || null;
+    };
+
+    Game.prototype.drawWarPilotPortrait = function (player, x, y, w, h) {
+      if (this.drawWarPhotoPortrait(player, x, y, w, h, this.colors.green)) return;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.88)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = this.colors.greenSoft;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+      ctx.strokeStyle = this.colors.green;
+      ctx.fillStyle = "rgba(57,255,104,0.10)";
+      ctx.shadowColor = this.colors.green;
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + 28, 19, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.lineTo(x + w / 2 + 21, y + 46);
+      ctx.lineTo(x + w / 2 - 21, y + 46);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(239,255,242,0.18)";
+      ctx.fillRect(x + 21, y + 28, 32, 8);
+      ctx.strokeRect(x + 20, y + 27, 34, 10);
+      ctx.beginPath();
+      ctx.moveTo(x + 54, y + 36);
+      ctx.lineTo(x + 63, y + 42);
+      ctx.lineTo(x + 63, y + 49);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + 24, y + 54);
+      ctx.lineTo(x + 50, y + 54);
+      ctx.lineTo(x + 60, y + 67);
+      ctx.lineTo(x + 14, y + 67);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.globalAlpha = 0.5;
+      for (let yy = y + 8; yy < y + h - 4; yy += 7) {
+        ctx.beginPath();
+        ctx.moveTo(x + 6, yy);
+        ctx.lineTo(x + w - 6, yy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarMachinePortrait = function (machine, x, y, w, h, corePct) {
+      const ctx = this.ctx;
+      const glitch = this.wargame ? this.wargame.machineGlitch : 0;
+      if (this.drawWarPhotoPortrait(machine, x, y, w, h, corePct <= 30 ? this.colors.red : this.colors.green, { glitch })) return;
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.9)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = corePct <= 30 ? this.colors.red : this.colors.greenSoft;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+      ctx.strokeStyle = corePct <= 30 ? this.colors.red : this.colors.green;
+      ctx.fillStyle = "rgba(57,255,104,0.08)";
+      ctx.shadowColor = ctx.strokeStyle;
+      ctx.shadowBlur = glitch > 0 ? 16 : 9;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + 16, y + 12, 38, 38);
+      ctx.fillRect(x + 18, y + 14, 34, 34);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fillRect(x + 24, y + 24, 8, 7);
+      ctx.fillRect(x + 40, y + 24, 8, 7);
+      ctx.strokeRect(x + 28, y + 39, 16, 6);
+      for (let i = 0; i < 4; i++) ctx.fillRect(x + 30 + i * 4, y + 40, 1, 5);
+      ctx.beginPath();
+      ctx.moveTo(x + 35, y + 50);
+      ctx.lineTo(x + 35, y + 60);
+      ctx.moveTo(x + 22, y + 60);
+      ctx.lineTo(x + 48, y + 60);
+      ctx.stroke();
+      if (glitch > 0) {
+        ctx.globalAlpha = Math.min(0.7, glitch * 2.2);
+        ctx.fillStyle = this.colors.green;
+        ctx.fillRect(x + 7, y + 18, 16, 2);
+        ctx.fillRect(x + 42, y + 34, 20, 2);
+        ctx.fillRect(x + 15, y + 54, 28, 2);
+      }
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarPhotoPortrait = function (player, x, y, w, h, tint, options = {}) {
+      const asset = player && this.playerAssets && this.playerAssets[player.assetId || player.id];
+      if (!asset || !asset.loaded) return false;
+      const ctx = this.ctx;
+      const glitch = options.glitch || 0;
+      const inset = 4;
+      const innerW = w - inset * 2;
+      const innerH = h - inset * 2;
+      const img = asset.img;
+      const scale = Math.max(innerW / img.width, innerH / img.height);
+      const iw = Math.ceil(img.width * scale);
+      const ih = Math.ceil(img.height * scale);
+      const ix = Math.floor(x + inset + (innerW - iw) / 2);
+      const iy = Math.floor(y + inset + (innerH - ih) / 2);
+
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.9)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = tint;
+      ctx.lineWidth = 1;
+      ctx.shadowColor = tint;
+      ctx.shadowBlur = glitch > 0 ? 16 : 8;
+      ctx.strokeRect(x, y, w, h);
+      ctx.beginPath();
+      ctx.rect(x + inset, y + inset, innerW, innerH);
+      ctx.clip();
+      ctx.imageSmoothingEnabled = false;
+      ctx.filter = "grayscale(1) contrast(1.35) brightness(0.78) sepia(1) hue-rotate(58deg) saturate(3.2)";
+      ctx.drawImage(img, ix, iy, iw, ih);
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = 0.24;
+      ctx.fillStyle = tint;
+      ctx.fillRect(x + inset, y + inset, innerW, innerH);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = "#000";
+      for (let yy = y + inset; yy < y + h - inset; yy += 4) ctx.fillRect(x + inset, yy, innerW, 1);
+      if (glitch > 0) {
+        ctx.globalAlpha = Math.min(0.68, glitch * 2.1);
+        ctx.fillStyle = tint;
+        ctx.fillRect(x + 9, y + 18, 24, 2);
+        ctx.fillRect(x + 32, y + 44, 30, 2);
+      }
+      ctx.restore();
+      return true;
     };
 
     Game.prototype.drawWarGameGameOver = function () {
@@ -858,6 +1045,29 @@
 
   function warCircleHit(a, b, radius) {
     return warDistance(a, b) <= radius;
+  }
+
+  function isWarSanctuary(city) {
+    return !!city && (city.type === "sanctuary" || city.isSanctuary);
+  }
+
+  function warFirstName(name) {
+    const cleanName = String(name || "").trim();
+    if (!cleanName) return "";
+    return cleanName.split(/\s+/)[0].replace(/[.,;:]+$/g, "");
+  }
+
+  function normalizeWarName(name) {
+    return warFirstName(name)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  }
+
+  function formatWarPilotName(player) {
+    const name = warFirstName(player && player.name) || "Fabien";
+    const label = name.trim().toUpperCase() || "UNKNOWN";
+    return label.length > 16 ? `${label.slice(0, 15)}~` : label;
   }
 
   function randomItem(list) {
