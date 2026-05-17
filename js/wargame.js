@@ -23,10 +23,57 @@
     heavySpeed: 330,
     standardSpawnBase: 2.15,
     hunterSpawnBase: 7.8,
+    hunterTurnRate: 2.7,
+    hunterLife: 5,
+    hunterLockMinInterval: 0.095,
+    hunterLockMaxInterval: 0.68,
+    hunterLockNearDistance: 34,
+    hunterLockFarDistance: 360,
+    hunterLockThreatRiseRate: 1.45,
+    radarPingInterval: 2,
+    radarSample: "assets/sounds/wargame-sonar.wav",
+    radarSampleSliceDuration: 0.95,
+    radarSampleVolume: 0.32,
     humanityLoss: 14,
     sanctuaryHumanityLoss: 25,
     coreHp: 6
   };
+  const WAR_RADAR = {
+    left: 66,
+    top: 160,
+    width: 828,
+    height: 328,
+    centerX: 480,
+    centerY: 300,
+    radius: 170,
+    outerRadius: 222
+  };
+  const WAR_CITY_LAYOUT = [
+    { id: "montreal", name: "Montréal", population: 4291732, x: 222, y: 222, labelDx: -18, labelDy: -22, labelAlign: "right", link: true },
+    { id: "new_york", name: "New York", population: 18804000, x: 326, y: 286, labelDx: -18, labelDy: -22, labelAlign: "right", link: true },
+    { id: "london", name: "Londres", population: 14800000, x: 428, y: 202, labelDx: -10, labelDy: -22, labelAlign: "right", link: true },
+    { id: "paris", name: "Paris", population: 11000000, x: 548, y: 226, labelDx: 12, labelDy: -22, labelAlign: "left", link: true, lock: true },
+    { id: "montrouge", name: "Montrouge", displayName: "SANCTUARY: MONTROUGE", population: 47293, x: 480, y: 300, type: "sanctuary", labelDx: 0, labelDy: 44, labelAlign: "center" },
+    { id: "riyadh", name: "Riyadh", population: 7676654, x: 620, y: 306, labelDx: 12, labelDy: -22, labelAlign: "left", link: true },
+    { id: "tokyo", name: "Tokyo", population: 42634827, x: 806, y: 286, labelDx: 0, labelDy: -24, labelAlign: "center", link: true, lock: true },
+    { id: "sao_paulo", name: "São Paulo", population: 22429800, x: 314, y: 392, labelDx: -12, labelDy: -22, labelAlign: "right", link: true },
+    { id: "cape_town", name: "Le Cap", population: 4778000, x: 560, y: 438, labelDx: 14, labelDy: -22, labelAlign: "left", link: true },
+    { id: "sydney", name: "Sydney", population: 5312000, x: 746, y: 430, labelDx: 0, labelDy: -22, labelAlign: "center", link: true }
+  ];
+  const WAR_SCOPE_BLIPS = [
+    { x: 156, y: 272, kind: "chevron" },
+    { x: 202, y: 244, kind: "square" },
+    { x: 248, y: 324, kind: "dot" },
+    { x: 366, y: 220, kind: "triangle" },
+    { x: 402, y: 380, kind: "bars" },
+    { x: 454, y: 414, kind: "square" },
+    { x: 548, y: 318, kind: "dot" },
+    { x: 590, y: 382, kind: "squareRed" },
+    { x: 666, y: 350, kind: "squareRed" },
+    { x: 730, y: 232, kind: "bars" },
+    { x: 760, y: 356, kind: "triangle" },
+    { x: 852, y: 318, kind: "dot" }
+  ];
 
   function installWargame(Game) {
     const baseDraw = Game.prototype.draw;
@@ -43,6 +90,7 @@
     };
 
     Game.prototype.startTitle = function () {
+      this.stopWarGameRadarLoop();
       this.resetWarGameUnlock();
       this.wargamePilotOverride = null;
       this.wargameOlivierCursor = 0;
@@ -125,22 +173,12 @@
     };
 
     Game.prototype.resetWarGameState = function () {
-      const cities = [
-        { name: "Paris", x: 472, y: 226, active: true, lost: false },
-        { id: "montrouge", name: "Montrouge", displayName: "SANCTUARY: MONTROUGE", x: 490, y: 250, active: true, lost: false, type: "sanctuary" },
-        { name: "New York", x: 245, y: 235, active: true, lost: false },
-        { name: "Tokyo", x: 756, y: 260, active: true, lost: false },
-        { name: "Sydney", x: 792, y: 398, active: true, lost: false },
-        { name: "Le Cap", x: 505, y: 405, active: true, lost: false },
-        { name: "São Paulo", x: 338, y: 380, active: true, lost: false },
-        { name: "Londres", x: 455, y: 205, active: true, lost: false },
-        { name: "Montréal", x: 267, y: 204, active: true, lost: false }
-      ];
+      const cities = WAR_CITY_LAYOUT.map(createWarCity);
       const machineNodes = [
-        { name: "ARCTIC SERVER", x: 488, y: 118, hp: 3, maxHp: 3, active: true, destroyed: false, core: false },
-        { name: "PACIFIC RELAY", x: 720, y: 326, hp: 3, maxHp: 3, active: true, destroyed: false, core: false },
-        { name: "ORBITAL UPLINK", x: 650, y: 156, hp: 3, maxHp: 3, active: true, destroyed: false, core: false },
-        { name: "MACHINE CORE", x: 840, y: 170, hp: WAR.coreHp, maxHp: WAR.coreHp, active: true, destroyed: false, core: true }
+        createWarNode({ name: "ARCTIC SERVER", x: 486, y: 184, hp: 3 }),
+        createWarNode({ name: "ORBITAL UPLINK", x: 704, y: 246, hp: 3 }),
+        createWarNode({ name: "PACIFIC RELAY", x: 814, y: 386, hp: 3 }),
+        createWarNode({ name: "MACHINE CORE", x: 866, y: 258, hp: WAR.coreHp, core: true })
       ];
 
       this.wargame = {
@@ -148,7 +186,7 @@
         time: 0,
         playerAircraft: {
           x: 480,
-          y: 430,
+          y: 460,
           r: 15,
           vx: 0,
           vy: 0,
@@ -165,8 +203,13 @@
         machineNodes,
         machineCore: machineNodes.find(node => node.core),
         humanity: 100,
+        victims: 0,
+        victimFlash: 0,
+        victimReport: null,
+        radarPingTimer: 0.85,
         gameOver: false,
         gameOverReason: "",
+        pendingGameOverReason: "",
         victory: false,
         spawnGrace: 3,
         spawnTimer: 3,
@@ -192,6 +235,7 @@
       this.wargame.hunterTimer = 9;
       this.screen = "wargame";
       this.audio.play("bonus");
+      this.preloadWarGameRadarSample();
     };
 
     Game.prototype.handleWarGameKey = function (key, baseHandle) {
@@ -255,6 +299,10 @@
       state.playerAircraft.fireFlash = Math.max(0, state.playerAircraft.fireFlash - dt);
       state.glitch = Math.max(0, state.glitch - dt);
       state.machineGlitch = Math.max(0, state.machineGlitch - dt);
+      state.victimFlash = Math.max(0, state.victimFlash - dt);
+      this.updateWarVictimReport(dt);
+      if (state.gameOver || state.victory) return;
+      this.updateWarGameRadarSound(dt);
 
       this.updateWarGamePlayer(dt);
       if (this.key(" ")) this.fireWarGameRapidShot();
@@ -314,14 +362,19 @@
     Game.prototype.spawnWarGameMissile = function (type) {
       const state = this.wargame;
       const liveNodes = state.machineNodes.filter(node => !node.destroyed);
-      const source = liveNodes[Math.floor(Math.random() * liveNodes.length)] || { x: this.width - 60, y: 92 };
       const target = type === "hunter"
         ? state.playerAircraft
         : randomItem(state.cities.filter(city => city.active));
       if (!target) return;
+      const source = liveNodes[Math.floor(Math.random() * liveNodes.length)]
+        || { x: clamp(target.x + Math.random() * 280 - 140, 84, this.width - 84), y: 92 };
       if (type === "standard" && isWarSanctuary(target)) {
         state.lastStatus = "MACHINE: SANCTUARY TARGETED";
         state.lastStatusDetail = "";
+      }
+      if (type === "hunter") {
+        state.lastStatus = "ENEMY LOCK: SEEKER INBOUND";
+        state.lastStatusDetail = "SEEKER ACTIVE: 5S";
       }
 
       const speed = type === "hunter"
@@ -336,10 +389,15 @@
         prevY: source.y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
+        speed,
+        turnRate: type === "hunter" ? WAR.hunterTurnRate : 0,
+        lockBeepTimer: 0,
+        lockThreat: 0,
+        lockPhase: Math.random() * Math.PI * 2,
         targetName: target.displayName || target.name || "PEACEKEEPER-50",
         target,
         r: type === "hunter" ? 6 : 5,
-        life: 12
+        life: type === "hunter" ? WAR.hunterLife : 12
       });
     };
 
@@ -402,7 +460,7 @@
       const state = this.wargame;
       moveWarList(state.playerShots, dt);
       moveWarList(state.heavyMissiles, dt);
-      moveWarList(state.enemyMissiles, dt);
+      this.updateWarGameEnemyMissiles(dt);
 
       for (let i = state.playerShots.length - 1; i >= 0; i--) {
         const shot = state.playerShots[i];
@@ -449,6 +507,12 @@
       for (let i = state.enemyMissiles.length - 1; i >= 0; i--) {
         const missile = state.enemyMissiles[i];
         if (missile.life <= 0 || missile.x < -40 || missile.x > this.width + 40 || missile.y < -40 || missile.y > this.height + 40) {
+          if (missile.life <= 0 && missile.type === "hunter") {
+            this.addWarExplosion(missile.x, missile.y, this.colors.amber, 14);
+            state.lastStatus = "SEEKER DISINTEGRATED";
+            state.lastStatusDetail = "LOCK TIMEOUT";
+            this.audio.play("destroy");
+          }
           state.enemyMissiles.splice(i, 1);
           continue;
         }
@@ -464,13 +528,104 @@
           target.active = false;
           target.lost = true;
           state.humanity = Math.max(0, state.humanity - humanityLoss);
+          const cityVictims = Math.max(0, Math.round(target.population || 0));
+          const previousVictims = state.victims;
+          state.victims += cityVictims;
+          state.victimFlash = 2.4;
+          this.startWarVictimReport(target, cityVictims, previousVictims, state.victims);
           state.enemyMissiles.splice(i, 1);
           state.lastStatus = sanctuary ? "SANCTUARY BREACHED: MONTROUGE" : `${target.name.toUpperCase()} LOST`;
-          state.lastStatusDetail = sanctuary ? `HUMANITY -${WAR.sanctuaryHumanityLoss}%` : "";
+          state.lastStatusDetail = formatWarVictims(cityVictims);
           this.addWarExplosion(target.x, target.y, this.colors.red, sanctuary ? 24 : 18);
           this.audio.play("lose");
         }
       }
+    };
+
+    Game.prototype.updateWarGameEnemyMissiles = function (dt) {
+      const state = this.wargame;
+      const aircraft = state.playerAircraft;
+      for (const missile of state.enemyMissiles) {
+        missile.prevX = missile.x;
+        missile.prevY = missile.y;
+        if (missile.type === "hunter") {
+          const speed = missile.speed || Math.hypot(missile.vx, missile.vy) || 120;
+          const desiredAngle = Math.atan2(aircraft.y - missile.y, aircraft.x - missile.x);
+          const currentAngle = Math.atan2(missile.vy, missile.vx);
+          const nextAngle = rotateWarAngleTowards(currentAngle, desiredAngle, (missile.turnRate || WAR.hunterTurnRate) * dt);
+          missile.vx = Math.cos(nextAngle) * speed;
+          missile.vy = Math.sin(nextAngle) * speed;
+          this.updateWarGameHunterLockBeep(missile, aircraft, dt);
+        }
+        missile.x += missile.vx * dt;
+        missile.y += missile.vy * dt;
+        missile.life -= dt;
+      }
+    };
+
+    Game.prototype.updateWarGameHunterLockBeep = function (missile, aircraft, dt) {
+      const distance = warDistance(missile, aircraft);
+      const proximity = 1 - clamp(
+        (distance - WAR.hunterLockNearDistance) / (WAR.hunterLockFarDistance - WAR.hunterLockNearDistance),
+        0,
+        1
+      );
+      const currentThreat = missile.lockThreat || 0;
+      const risingThreat = Math.min(proximity, currentThreat + WAR.hunterLockThreatRiseRate * dt);
+      missile.lockThreat = Math.max(currentThreat, risingThreat);
+      const threatCurve = 1 - Math.pow(1 - missile.lockThreat, 1.75);
+      const nextInterval = WAR.hunterLockMaxInterval - (WAR.hunterLockMaxInterval - WAR.hunterLockMinInterval) * threatCurve;
+      missile.lockBeepTimer = Math.max(0, (missile.lockBeepTimer || 0) - dt);
+      if (missile.lockBeepTimer > 0) return;
+      this.playWarGameLockBeep(missile.lockThreat);
+      missile.lockBeepTimer = nextInterval;
+    };
+
+    Game.prototype.startWarVictimReport = function (city, victims, totalFrom, totalTo) {
+      this.wargame.victimReport = {
+        cityName: city.name,
+        victims,
+        totalFrom,
+        totalTo,
+        elapsed: 0,
+        duration: 1.25,
+        hold: 1.05
+      };
+    };
+
+    Game.prototype.updateWarVictimReport = function (dt) {
+      const report = this.wargame.victimReport;
+      if (!report) return;
+      report.elapsed += dt;
+      if (report.elapsed >= report.duration + report.hold) {
+        this.wargame.victimReport = null;
+        if (this.wargame.pendingGameOverReason) {
+          const reason = this.wargame.pendingGameOverReason;
+          this.wargame.pendingGameOverReason = "";
+          this.startWarGameGameOver(reason);
+        }
+      }
+    };
+
+    Game.prototype.warVictimReportProgress = function () {
+      const report = this.wargame && this.wargame.victimReport;
+      if (!report) return 1;
+      const t = clamp(report.elapsed / report.duration, 0, 1);
+      return 1 - Math.pow(1 - t, 3);
+    };
+
+    Game.prototype.warDisplayedVictims = function () {
+      const state = this.wargame;
+      const report = state && state.victimReport;
+      if (!report) return state ? state.victims : 0;
+      const progress = this.warVictimReportProgress();
+      return Math.round(report.totalFrom + (report.totalTo - report.totalFrom) * progress);
+    };
+
+    Game.prototype.warDisplayedEventVictims = function () {
+      const report = this.wargame && this.wargame.victimReport;
+      if (!report) return 0;
+      return Math.round(report.victims * this.warVictimReportProgress());
     };
 
     Game.prototype.updateWarGameExplosions = function (dt) {
@@ -487,7 +642,13 @@
       const state = this.wargame;
       if (state.gameOver || state.victory) return;
       const citiesLost = state.cities.every(city => !city.active);
-      if (state.humanity <= 0 || citiesLost) this.startWarGameGameOver("humanity");
+      if (state.humanity <= 0 || citiesLost) {
+        if (state.victimReport) {
+          state.pendingGameOverReason = "humanity";
+          return;
+        }
+        this.startWarGameGameOver("humanity");
+      }
     };
 
     Game.prototype.startWarGameGameOver = function (reason) {
@@ -498,6 +659,7 @@
       state.enemyMissiles.length = 0;
       state.playerShots.length = 0;
       state.heavyMissiles.length = 0;
+      this.stopWarGameRadarLoop();
       this.screen = "wargameGameOver";
       this.audio.play("lose");
     };
@@ -508,12 +670,199 @@
       state.enemyMissiles.length = 0;
       state.playerShots.length = 0;
       state.heavyMissiles.length = 0;
+      this.stopWarGameRadarLoop();
       this.screen = "wargameVictory";
       this.audio.play("win");
     };
 
     Game.prototype.addWarExplosion = function (x, y, color, radius) {
       this.wargame.explosions.push({ x, y, r: 3, maxR: radius, grow: radius * 2.4, life: 0.36, color });
+    };
+
+    Game.prototype.playWarGameLockBeep = function (threat = 0) {
+      const ctx = this.warGameAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const pressure = clamp(threat, 0, 1);
+      const freq = 840 + pressure * 210;
+      const gap = 0.06 - pressure * 0.022;
+      const duration = 0.048 - pressure * 0.012;
+      const volume = 0.095 + pressure * 0.05;
+      [
+        0,
+        gap
+      ].forEach(offset => {
+        const osc = ctx.createOscillator();
+        const harmonic = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const harmonicGain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        osc.type = "square";
+        harmonic.type = "triangle";
+        osc.frequency.setValueAtTime(freq, now + offset);
+        harmonic.frequency.setValueAtTime(freq * 2.01, now + offset);
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(freq * 1.12, now + offset);
+        filter.Q.setValueAtTime(8 + pressure * 10, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(volume, now + offset + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + duration);
+        harmonicGain.gain.setValueAtTime(0.0001, now + offset);
+        harmonicGain.gain.exponentialRampToValueAtTime(0.018 + pressure * 0.02, now + offset + 0.004);
+        harmonicGain.gain.exponentialRampToValueAtTime(0.0001, now + offset + duration * 0.82);
+        osc.connect(filter);
+        filter.connect(gain);
+        harmonic.connect(harmonicGain);
+        gain.connect(ctx.destination);
+        harmonicGain.connect(ctx.destination);
+        osc.start(now + offset);
+        harmonic.start(now + offset);
+        osc.stop(now + offset + duration + 0.02);
+        harmonic.stop(now + offset + duration + 0.02);
+      });
+      this.playWarGameLockClick(now, pressure);
+    };
+
+    Game.prototype.playWarGameLockClick = function (now, pressure) {
+      const ctx = this.warGameAudioContext();
+      if (!ctx) return;
+      const length = Math.floor(ctx.sampleRate * 0.026);
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        const fade = 1 - i / length;
+        data[i] = (Math.random() * 2 - 1) * fade * fade;
+      }
+      const noise = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      noise.buffer = buffer;
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(1800 + pressure * 900, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.025 + pressure * 0.018, now + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.026);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + 0.035);
+    };
+
+    Game.prototype.updateWarGameRadarSound = function (dt) {
+      const state = this.wargame;
+      if (!this.syncWarGameRadarSample()) return;
+      state.radarPingTimer -= dt;
+      if (state.radarPingTimer > 0) return;
+      this.playWarGameRadarPing();
+      state.radarPingTimer = WAR.radarPingInterval;
+    };
+
+    Game.prototype.syncWarGameRadarSample = function () {
+      if (!this.wargame || this.screen !== "wargame" || this.wargame.gameOver || this.wargame.victory) {
+        this.stopWarGameRadarLoop();
+        return false;
+      }
+      if (!this.audio || !this.audio.enabled) {
+        this.stopWarGameRadarLoop();
+        return false;
+      }
+      this.preloadWarGameRadarSample();
+      return true;
+    };
+
+    Game.prototype.preloadWarGameRadarSample = function () {
+      if (!this.audio || !this.audio.enabled || typeof Audio === "undefined") return false;
+      if (!this.warGameRadarLoop) {
+        const sample = new Audio(WAR.radarSample);
+        sample.loop = false;
+        sample.preload = "auto";
+        sample.volume = WAR.radarSampleVolume;
+        sample.addEventListener("error", () => {
+          sample.failed = true;
+        });
+        this.warGameRadarLoop = sample;
+      }
+      this.warGameRadarLoop.volume = WAR.radarSampleVolume;
+      return !this.warGameRadarLoop.failed;
+    };
+
+    Game.prototype.stopWarGameRadarLoop = function () {
+      const loop = this.warGameRadarLoop;
+      if (!loop) return;
+      if (this.warGameRadarSampleStopTimer) {
+        clearTimeout(this.warGameRadarSampleStopTimer);
+        this.warGameRadarSampleStopTimer = null;
+      }
+      loop.pause();
+      try {
+        loop.currentTime = 0;
+      } catch (error) {
+        // Some browsers can reject currentTime resets before metadata is ready.
+      }
+    };
+
+    Game.prototype.playWarGameRadarPing = function () {
+      if (this.playWarGameRadarSample()) return;
+      const ctx = this.warGameAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      [
+        { offset: 0, volume: 0.034, start: 940, end: 520, duration: 0.42 },
+        { offset: 0.22, volume: 0.014, start: 720, end: 410, duration: 0.34 }
+      ].forEach(ping => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(ping.start, now + ping.offset);
+        osc.frequency.exponentialRampToValueAtTime(ping.end, now + ping.offset + ping.duration);
+        gain.gain.setValueAtTime(0.0001, now + ping.offset);
+        gain.gain.exponentialRampToValueAtTime(ping.volume, now + ping.offset + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + ping.offset + ping.duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + ping.offset);
+        osc.stop(now + ping.offset + ping.duration + 0.03);
+      });
+    };
+
+    Game.prototype.playWarGameRadarSample = function () {
+      if (!this.preloadWarGameRadarSample()) return false;
+      const sample = this.warGameRadarLoop;
+      if (!sample || sample.failed) return false;
+      if (this.warGameRadarSampleStopTimer) {
+        clearTimeout(this.warGameRadarSampleStopTimer);
+        this.warGameRadarSampleStopTimer = null;
+      }
+      sample.pause();
+      try {
+        sample.currentTime = 0;
+      } catch (error) {
+        return false;
+      }
+      const play = sample.play();
+      if (play && play.catch) {
+        play.catch(() => {
+          sample.failed = true;
+        });
+      }
+      this.warGameRadarSampleStopTimer = setTimeout(() => {
+        sample.pause();
+        try {
+          sample.currentTime = 0;
+        } catch (error) {
+          // Resetting can fail before metadata is ready; the next ping will retry.
+        }
+        this.warGameRadarSampleStopTimer = null;
+      }, WAR.radarSampleSliceDuration * 1000);
+      return true;
+    };
+
+    Game.prototype.warGameAudioContext = function () {
+      const audio = this.audio;
+      if (!audio || !audio.enabled || !audio.ctx) return null;
+      if (audio.ctx.state === "suspended") audio.ctx.resume();
+      return audio.ctx;
     };
 
     Game.prototype.drawWarGameOlivierSelect = function () {
@@ -591,7 +940,6 @@
 
     Game.prototype.drawWarGame = function () {
       const ctx = this.ctx;
-      const state = this.wargame;
       ctx.save();
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, this.width, this.height);
@@ -602,27 +950,269 @@
       this.drawWarAircraft();
       this.drawWarExplosions();
       this.drawWarHud();
+      this.drawWarVictimReportOverlay();
       this.drawWarScanlines();
       ctx.restore();
     };
 
     Game.prototype.drawWarMap = function () {
       const ctx = this.ctx;
-      this.drawWarConsoleGrid(0.22);
+      const state = this.wargame;
+      this.drawWarConsoleGrid(0.16);
+      this.drawWarMapAxes();
+      this.drawWarRadarOverlay();
+      this.drawWarScopeBlips();
+      this.drawWarSanctuaryCore();
+
       ctx.save();
-      ctx.strokeStyle = "rgba(57,255,104,0.38)";
-      ctx.lineWidth = 2;
+      const core = state && state.machineCore;
+      if (core && !core.destroyed) {
+        ctx.strokeStyle = "rgba(255,208,79,0.36)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(WAR_RADAR.centerX + 160, WAR_RADAR.top + 38);
+        ctx.lineTo(core.x - 42, WAR_RADAR.top + 38);
+        ctx.lineTo(core.x - 18, core.y - 24);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarRadarOverlay = function () {
+      const ctx = this.ctx;
+      const cx = WAR_RADAR.centerX;
+      const cy = WAR_RADAR.centerY;
+      const radius = WAR_RADAR.radius;
+      const outerRadius = WAR_RADAR.outerRadius;
+      const now = performance.now() / 1000;
+      const sweep = now * 0.72 - Math.PI / 2;
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(57,255,104,0.52)";
       ctx.shadowColor = this.colors.green;
-      ctx.shadowBlur = 8;
-      drawWarPolyline(ctx, [[140, 235], [208, 198], [298, 210], [348, 274], [318, 346], [246, 392], [162, 330], [128, 278]]);
-      drawWarPolyline(ctx, [[385, 196], [455, 162], [560, 180], [625, 246], [586, 318], [494, 346], [420, 300]]);
-      drawWarPolyline(ctx, [[590, 210], [695, 160], [818, 198], [858, 312], [770, 384], [650, 350], [628, 270]]);
-      drawWarPolyline(ctx, [[430, 330], [535, 344], [560, 430], [494, 468], [438, 412]]);
-      ctx.setLineDash([9, 10]);
+      ctx.shadowBlur = 4;
+      ctx.lineWidth = 1.3;
+      ctx.setLineDash([8, 10]);
       ctx.beginPath();
-      ctx.arc(480, 278, 192, 0, Math.PI * 2);
+      ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      ctx.globalAlpha = 0.38;
+      ctx.lineWidth = 1;
+      for (const ring of [42, 82, 124, radius]) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, ring, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 0.32;
+      for (let deg = 0; deg < 360; deg += 30) {
+        const a = (Math.PI * deg) / 180;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * 30, cy + Math.sin(a) * 30);
+        ctx.lineTo(cx + Math.cos(a) * outerRadius, cy + Math.sin(a) * outerRadius);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 0.96;
+      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius + 26);
+      gradient.addColorStop(0, "rgba(255,208,79,0.20)");
+      gradient.addColorStop(0.45, "rgba(57,255,104,0.15)");
+      gradient.addColorStop(1, "rgba(57,255,104,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius + 26, sweep - 0.16, sweep + 0.13);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,208,79,0.44)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(sweep) * (radius + 26), cy + Math.sin(sweep) * (radius + 26));
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(57,255,104,0.78)";
+      ctx.fillStyle = "rgba(57,255,104,0.10)";
+      ctx.shadowBlur = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarMapAxes = function () {
+      const ctx = this.ctx;
+      const left = WAR_RADAR.left;
+      const top = WAR_RADAR.top;
+      const right = WAR_RADAR.left + WAR_RADAR.width;
+      const bottom = WAR_RADAR.top + WAR_RADAR.height;
+      ctx.save();
+      ctx.strokeStyle = "rgba(57,255,104,0.30)";
+      ctx.fillStyle = this.colors.green;
+      ctx.shadowColor = this.colors.green;
+      ctx.shadowBlur = 2;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(left, top);
+      ctx.lineTo(left, bottom);
+      ctx.lineTo(right, bottom);
+      ctx.stroke();
+
+      for (let x = left + 20; x <= right; x += 20) {
+        const tall = (x - left) % 80 === 0;
+        ctx.beginPath();
+        ctx.moveTo(x, bottom - (tall ? 10 : 5));
+        ctx.lineTo(x, bottom + (tall ? 10 : 5));
+        ctx.stroke();
+      }
+      for (let y = top + 20; y <= bottom; y += 20) {
+        const tall = (y - top) % 80 === 0;
+        ctx.beginPath();
+        ctx.moveTo(left - (tall ? 10 : 5), y);
+        ctx.lineTo(left + (tall ? 10 : 5), y);
+        ctx.stroke();
+      }
+
+      [
+        ["090", top + 34],
+        ["060", top + 92],
+        ["030", top + 150],
+        ["000", top + 206],
+        ["030", top + 264],
+        ["060", top + 322]
+      ].forEach(([label, y]) => this.drawText(label, left - 38, y + 4, 9, this.colors.green));
+
+      [
+        ["270", left + 44],
+        ["300", left + 180],
+        ["330", left + 316],
+        ["000", WAR_RADAR.centerX],
+        ["030", left + 586],
+        ["060", left + 724],
+        ["090", right - 12]
+      ].forEach(([label, x]) => this.drawText(label, x, bottom + 18, 9, this.colors.green, "center"));
+
+      ctx.globalAlpha = 0.2;
+      ctx.beginPath();
+      ctx.moveTo(WAR_RADAR.centerX, top);
+      ctx.lineTo(WAR_RADAR.centerX, bottom);
+      ctx.moveTo(left, WAR_RADAR.centerY);
+      ctx.lineTo(right, WAR_RADAR.centerY);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarScopeBlips = function () {
+      const ctx = this.ctx;
+      const flicker = 0.72 + Math.sin(performance.now() / 210) * 0.18;
+      for (const blip of WAR_SCOPE_BLIPS) {
+        ctx.save();
+        const red = blip.kind === "squareRed";
+        ctx.strokeStyle = red ? "rgba(255,56,85,0.72)" : "rgba(57,255,104,0.58)";
+        ctx.fillStyle = red ? "rgba(255,56,85,0.58)" : "rgba(57,255,104,0.48)";
+        ctx.globalAlpha = red ? flicker : 0.5;
+        ctx.shadowColor = red ? this.colors.red : this.colors.green;
+        ctx.shadowBlur = red ? 4 : 2;
+        if (blip.kind === "chevron") {
+          ctx.beginPath();
+          ctx.moveTo(blip.x + 14, blip.y - 8);
+          ctx.lineTo(blip.x, blip.y);
+          ctx.lineTo(blip.x + 14, blip.y + 8);
+          ctx.moveTo(blip.x + 20, blip.y - 8);
+          ctx.lineTo(blip.x + 6, blip.y);
+          ctx.lineTo(blip.x + 20, blip.y + 8);
+          ctx.stroke();
+        } else if (blip.kind === "triangle") {
+          ctx.beginPath();
+          ctx.moveTo(blip.x, blip.y - 5);
+          ctx.lineTo(blip.x + 5, blip.y + 5);
+          ctx.lineTo(blip.x - 5, blip.y + 5);
+          ctx.closePath();
+          ctx.stroke();
+        } else if (blip.kind === "bars") {
+          for (let i = 0; i < 6; i++) {
+            ctx.fillRect(blip.x + i * 5, blip.y - i * 4, 2, 12 + i * 4);
+          }
+        } else if (blip.kind === "dot") {
+          ctx.fillRect(blip.x - 2, blip.y - 2, 4, 4);
+        } else {
+          ctx.strokeRect(blip.x - 5, blip.y - 5, 10, 10);
+        }
+        ctx.restore();
+      }
+      this.drawWarMiniWave(92, 204, 72, 28);
+      this.drawWarMiniWave(792, 404, 80, 44);
+    };
+
+    Game.prototype.drawWarMiniWave = function (x, y, w, h) {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.strokeStyle = "rgba(57,255,104,0.46)";
+      ctx.fillStyle = "rgba(57,255,104,0.35)";
+      ctx.shadowColor = this.colors.green;
+      ctx.shadowBlur = 2;
+      ctx.strokeRect(x, y, w, h);
+      for (let i = 0; i < 13; i++) {
+        const bar = 4 + Math.abs(Math.sin(i * 0.85 + performance.now() / 420)) * (h - 8);
+        ctx.fillRect(x + 10 + i * 5, y + h - bar - 4, 2, bar);
+      }
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarSanctuaryCore = function () {
+      const ctx = this.ctx;
+      const cx = WAR_RADAR.centerX;
+      const cy = WAR_RADAR.centerY;
+      const pulse = 0.5 + Math.sin(performance.now() / 160) * 0.5;
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(57,255,104,0.78)";
+      ctx.shadowColor = this.colors.green;
+      ctx.shadowBlur = 4 + pulse * 4;
+      ctx.lineWidth = 1.2;
+      for (const r of [34, 52, 70]) {
+        ctx.globalAlpha = 0.22 + pulse * 0.1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.82;
+      ctx.strokeRect(cx - 15, cy - 15, 30, 30);
+      ctx.beginPath();
+      ctx.moveTo(cx - 46, cy);
+      ctx.lineTo(cx - 18, cy);
+      ctx.moveTo(cx + 18, cy);
+      ctx.lineTo(cx + 46, cy);
+      ctx.moveTo(cx, cy - 46);
+      ctx.lineTo(cx, cy - 18);
+      ctx.moveTo(cx, cy + 18);
+      ctx.lineTo(cx, cy + 46);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarLabelText = function (str, x, y, size, color, align = "left") {
+      if (!str) return;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.font = `${size}px "Courier New", Courier, monospace`;
+      ctx.textAlign = align;
+      ctx.textBaseline = "alphabetic";
+      const width = ctx.measureText(str).width;
+      const left = align === "center" ? x - width / 2 : align === "right" ? x - width : x;
+      ctx.fillStyle = "rgba(0,0,0,0.78)";
+      ctx.fillRect(left - 4, y - size - 3, width + 8, size + 6);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 2;
+      ctx.fillStyle = color;
+      ctx.fillText(str, x, y);
       ctx.restore();
     };
 
@@ -631,32 +1221,66 @@
       for (const city of this.wargame.cities) {
         ctx.save();
         const sanctuary = isWarSanctuary(city);
-        const label = city.displayName || city.name;
+        const label = city.name;
         const pulse = 0.55 + Math.sin(performance.now() / 150) * 0.45;
         const color = city.active ? this.colors.green : this.colors.red;
+        const ringRadius = sanctuary ? 18 : 13;
         ctx.strokeStyle = color;
-        ctx.fillStyle = city.active ? "rgba(57,255,104,0.22)" : "rgba(255,56,85,0.20)";
+        ctx.fillStyle = city.active ? "rgba(57,255,104,0.20)" : "rgba(255,56,85,0.18)";
         ctx.shadowColor = color;
-        ctx.shadowBlur = sanctuary && city.active ? 18 : city.active ? 8 : 12;
-        if (sanctuary && city.active) {
-          ctx.globalAlpha = 0.5 + pulse * 0.38;
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.arc(city.x, city.y, 13 + pulse * 2, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(city.x, city.y, 19 + pulse * 2, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          ctx.strokeRect(city.x - 7, city.y - 7, 14, 14);
-        }
+        ctx.shadowBlur = sanctuary && city.active ? 9 : city.active ? 4 : 7;
+        ctx.globalAlpha = city.active ? 0.9 : 0.7;
+        ctx.lineWidth = sanctuary ? 1.6 : 1.2;
         ctx.beginPath();
-        ctx.arc(city.x, city.y, city.active ? sanctuary ? 6 : 5 : 7, 0, Math.PI * 2);
+        ctx.arc(city.x, city.y, ringRadius + pulse * (city.active ? 2 : 0), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = city.active ? 0.62 : 0.36;
+        ctx.beginPath();
+        ctx.arc(city.x, city.y, ringRadius - 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        this.drawText(city.lost ? `${label} LOST` : label, city.x + 10, city.y + (sanctuary ? 20 : -8), sanctuary ? 9 : 10, color);
+        ctx.globalAlpha = 1;
+        ctx.fillRect(city.x - 2, city.y - 2, 4, 4);
+        if (sanctuary) {
+          ctx.strokeRect(city.x - 8, city.y - 8, 16, 16);
+        }
+        if (city.lock) this.drawWarLockBrackets(city.x, city.y, color);
+        const labelX = city.x + (city.labelDx ?? 10);
+        const labelY = city.y + (city.labelDy ?? (sanctuary ? 16 : -8));
+        if (sanctuary) {
+          this.drawWarLabelText(city.lost ? "MONTROUGE LOST" : "Montrouge", labelX, labelY, 10, color, "center");
+          this.drawWarLabelText("SANCTUARY", labelX, labelY + 18, 10, city.active ? this.colors.green : this.colors.red, "center");
+        } else {
+          this.drawWarLabelText(city.lost ? `${label} LOST` : label, labelX, labelY, 10, color, city.labelAlign || "left");
+        }
         ctx.restore();
       }
+    };
+
+    Game.prototype.drawWarLockBrackets = function (x, y, color) {
+      const ctx = this.ctx;
+      const r = 28;
+      const l = 9;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 3;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x - r, y - r + l);
+      ctx.lineTo(x - r, y - r);
+      ctx.lineTo(x - r + l, y - r);
+      ctx.moveTo(x + r - l, y - r);
+      ctx.lineTo(x + r, y - r);
+      ctx.lineTo(x + r, y - r + l);
+      ctx.moveTo(x - r, y + r - l);
+      ctx.lineTo(x - r, y + r);
+      ctx.lineTo(x - r + l, y + r);
+      ctx.moveTo(x + r - l, y + r);
+      ctx.lineTo(x + r, y + r);
+      ctx.lineTo(x + r, y + r - l);
+      ctx.stroke();
+      ctx.restore();
     };
 
     Game.prototype.drawWarMachineNodes = function () {
@@ -706,7 +1330,7 @@
         ctx.rotate(Math.atan2(missile.vy, missile.vx) + Math.PI / 2);
         ctx.fillStyle = color;
         ctx.shadowColor = color;
-        ctx.shadowBlur = 9;
+        ctx.shadowBlur = missile.type === "hunter" ? 14 : 9;
         ctx.beginPath();
         ctx.moveTo(0, -8);
         ctx.lineTo(5, 6);
@@ -714,6 +1338,14 @@
         ctx.lineTo(-5, 6);
         ctx.closePath();
         ctx.fill();
+        if (missile.type === "hunter") {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 3]);
+          ctx.beginPath();
+          ctx.arc(0, 0, 12 + Math.sin(performance.now() / 95 + missile.lockPhase) * 2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     };
@@ -867,37 +1499,169 @@
       const callsign = formatWarPilotCallsign(pilot, selectedPilot);
       const lost = state.cities.filter(city => !city.active).length;
       const corePct = Math.max(0, Math.round((state.machineCore.hp / state.machineCore.maxHp) * 100));
-      this.panel(22, 20, 312, 166, 0.62);
-      this.drawText("WARGAME.EXE", 40, 48, 18, this.colors.green);
-      this.drawWarPilotPortrait(pilot, 40, 60, 74, 72);
-      this.drawText("PILOT", 128, 72, 11, this.colors.amber);
-      this.drawText(pilotName, 128, 92, 15, this.colors.white);
-      this.drawText(`CALLSIGN: ${callsign}`, 128, 112, 11, this.colors.white);
-      this.drawText("AIRCRAFT: PEACEKEEPER-50", 128, 132, 11, this.colors.white);
-      this.drawText(`HUMANITY: ${Math.round(state.humanity)}%`, 40, 158, 12, this.colors.amber);
-      this.drawText(`CITIES LOST: ${lost} / ${state.cities.length}`, 178, 158, 12, lost ? this.colors.red : this.colors.green);
+      this.drawWarHudPanel(12, 12, 286, 146);
+      this.drawText("WARGAME.EXE", 30, 38, 17, this.colors.green);
+      this.drawWarPilotPortrait(pilot, 30, 54, 78, 72);
+      this.drawText("PILOT", 122, 64, 10, this.colors.amber);
+      this.drawText(pilotName, 122, 84, 14, this.colors.white);
+      this.drawText(`CALLSIGN: ${callsign}`, 122, 104, 10, this.colors.white);
+      this.drawText("AIRCRAFT: PEACEKEEPER-50", 122, 124, 10, this.colors.white);
+      this.drawText(`HUMANITY: ${Math.round(state.humanity)}%`, 30, 146, 11, state.humanity <= 25 ? this.colors.red : this.colors.green);
+      this.drawText(`CITIES LOST: ${lost} / ${state.cities.length}`, 164, 146, 11, lost ? this.colors.red : this.colors.green);
 
-      this.panel(352, 20, 256, 72, 0.58);
-      this.drawText("WAR CONSOLE", 370, 42, 12, this.colors.white);
-      this.drawText(state.lastStatus, 370, 64, 10, this.colors.green);
-      if (state.lastStatusDetail) this.drawText(state.lastStatusDetail, 370, 84, 10, this.colors.amber);
+      this.drawWarHudPanel(346, 14, 270, 72);
+      this.drawText("WAR CONSOLE", 364, 38, 13, this.colors.white);
+      this.drawWarHudMeter(468, 27, 126, 7, state.humanity / 100);
+      const statusDanger = state.lastStatus.includes("LOST") || state.lastStatus.includes("BREACHED") || state.lastStatus.includes("ENEMY LOCK");
+      const statusColor = statusDanger ? this.colors.red : this.colors.green;
+      this.drawText(state.lastStatus, 364, 64, 10, statusColor);
+      if (state.lastStatusDetail) this.drawText(state.lastStatusDetail, 364, 82, 9, this.colors.amber);
+      this.drawWarVictimCounter(346, 94, 270, 58, lost);
 
-      this.panel(646, 20, 292, 112, 0.58);
-      this.drawWarMachinePortrait(machine, 846, 42, 70, 70, corePct);
-      this.drawText("MACHINE", 664, 51, 15, this.colors.red);
-      this.drawText("STATUS: ACTIVE", 664, 75, 11, this.colors.green);
-      this.drawText(`CORE: ${corePct}%`, 664, 99, 12, corePct <= 30 ? this.colors.red : this.colors.amber);
-      this.drawText(`HEAVY: ${state.heavyCooldown <= 0 ? "READY" : `${state.heavyCooldown.toFixed(1)}S`}`, 664, 123, 11, this.colors.white);
+      this.drawWarHudPanel(662, 12, 286, 110);
+      this.drawWarMachinePortrait(machine, 856, 34, 70, 70, corePct);
+      this.drawText("MACHINE", 680, 38, 15, this.colors.red);
+      this.drawText("STATUS: ACTIVE", 680, 64, 11, this.colors.green);
+      this.drawText(`CORE: ${corePct}%`, 680, 88, 12, corePct <= 30 ? this.colors.red : this.colors.amber);
+      this.drawText(`HEAVY: ${state.heavyCooldown <= 0 ? "READY" : `${state.heavyCooldown.toFixed(1)}S`}`, 680, 112, 11, this.colors.white);
 
-      this.drawWarControlsLegend();
+      this.drawWarGlobalStatusLegend();
+      this.drawWarBottomStatusBar();
     };
 
-    Game.prototype.drawWarControlsLegend = function () {
-      this.panel(22, 448, 382, 78, 0.52);
-      this.drawText("COMMANDES", 40, 468, 10, this.colors.amber);
-      this.drawText("DEPLACEMENT: HAUT BAS GAUCHE DROITE", 40, 487, 9, this.colors.green);
-      this.drawText("TIR MITRAILLEUSE: ESPACE", 40, 505, 9, this.colors.white);
-      this.drawText("TIR MISSILE: X / CTRL", 40, 523, 9, this.colors.white);
+    Game.prototype.drawWarVictimCounter = function (x, y, w, h, lost) {
+      const state = this.wargame;
+      const displayedVictims = this.warDisplayedVictims();
+      const alert = state.victims > 0;
+      const flash = state.victimFlash > 0 && Math.floor(performance.now() / 90) % 2 === 0;
+      const color = flash || alert ? this.colors.red : this.colors.green;
+      this.drawWarHudPanel(x, y, w, h, color);
+      this.drawText("TOTAL VICTIMS", x + 16, y + 18, 9, color);
+      this.drawText(formatWarVictimNumber(displayedVictims), x + w - 16, y + 40, 18, color, "right");
+      this.drawText(`CITY LOSS ${lost}/${state.cities.length}`, x + 16, y + 52, 8, alert ? this.colors.amber : this.colors.green);
+    };
+
+    Game.prototype.drawWarVictimReportOverlay = function () {
+      const report = this.wargame && this.wargame.victimReport;
+      if (!report) return;
+      const ctx = this.ctx;
+      const victims = this.warDisplayedEventVictims();
+      const progress = clamp(report.elapsed / report.duration, 0, 1);
+      const finalHold = progress >= 1;
+      const alpha = report.elapsed > report.duration
+        ? Math.max(0, 1 - (report.elapsed - report.duration) / report.hold)
+        : 1;
+      const pulse = 0.72 + Math.sin(performance.now() / 55) * 0.18;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      const x = 300;
+      const y = 450;
+      const w = 360;
+      const h = 42;
+      this.drawWarHudPanel(x, y, w, h, this.colors.red);
+      ctx.strokeStyle = this.colors.red;
+      ctx.shadowColor = this.colors.red;
+      ctx.shadowBlur = finalHold ? 5 : 9;
+      ctx.globalAlpha = alpha * (finalHold ? 0.28 : 0.18 + pulse * 0.08);
+      ctx.strokeRect(x + 7, y + 6, w - 14, h - 12);
+      ctx.globalAlpha = alpha;
+      this.drawText(`CITY LOST: ${report.cityName.toUpperCase()}`, 480, y + 16, 9, this.colors.red, "center");
+      this.drawText(formatWarVictims(victims), 480, y + 34, 15, this.colors.red, "center");
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarHudPanel = function (x, y, w, h, color = this.colors.green) {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.76)";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 4;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      ctx.globalAlpha = 0.22;
+      ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarHudMeter = function (x, y, w, h, pct) {
+      const ctx = this.ctx;
+      const value = clamp(pct || 0, 0, 1);
+      ctx.save();
+      ctx.strokeStyle = "rgba(57,255,104,0.82)";
+      ctx.fillStyle = "rgba(57,255,104,0.16)";
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillRect(x + 2, y + 2, Math.max(0, (w - 4) * value), h - 4);
+      ctx.restore();
+    };
+
+    Game.prototype.drawWarGlobalStatusLegend = function () {
+      const ctx = this.ctx;
+      const x = 52;
+      const y = 344;
+      const w = 136;
+      const h = 126;
+      this.drawWarHudPanel(x, y, w, h);
+      this.drawText("GLOBAL STATUS", x + 12, y + 24, 10, this.colors.green);
+      const rows = [
+        { label: "ACTIVE ZONE", color: this.colors.green, kind: "box" },
+        { label: "LOST ZONE", color: this.colors.red, kind: "box" },
+        { label: "CRITICAL TARGET", color: this.colors.amber, kind: "box" },
+        { label: "CITY / NODE", color: this.colors.green, kind: "circle" },
+        { label: "SANCTUARY", color: this.colors.green, kind: "double" },
+        { label: "RADAR RANGE", color: this.colors.green, kind: "dash" }
+      ];
+      rows.forEach((row, index) => {
+        const yy = y + 42 + index * 16;
+        ctx.save();
+        ctx.strokeStyle = row.color;
+        ctx.fillStyle = row.kind === "box" ? "rgba(57,255,104,0.08)" : row.color;
+        ctx.shadowColor = row.color;
+        ctx.shadowBlur = 3;
+        if (row.kind === "box") {
+          ctx.strokeRect(x + 12, yy - 10, 12, 12);
+        } else if (row.kind === "circle") {
+          ctx.beginPath();
+          ctx.arc(x + 18, yy - 4, 5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillRect(x + 17, yy - 5, 2, 2);
+        } else if (row.kind === "double") {
+          ctx.beginPath();
+          ctx.arc(x + 18, yy - 4, 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(x + 18, yy - 4, 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(x + 12, yy - 4);
+          ctx.lineTo(x + 28, yy - 4);
+          ctx.stroke();
+        }
+        ctx.restore();
+        this.drawText(row.label, x + 36, yy, 9, row.color);
+      });
+    };
+
+    Game.prototype.drawWarBottomStatusBar = function () {
+      const now = new Date();
+      const utc = now.toISOString().slice(11, 19);
+      const state = this.wargame;
+      const liveCities = state.cities.filter(city => city.active).length;
+      const threat = liveCities <= 4 || state.humanity <= 45 ? "HIGH" : state.enemyMissiles.length > 3 ? "ELEVATED" : "GUARDED";
+      const threatColor = threat === "HIGH" ? this.colors.red : threat === "ELEVATED" ? this.colors.amber : this.colors.green;
+      this.drawWarHudPanel(12, 502, 132, 26);
+      this.drawText(`UTC ${utc}`, 30, 520, 11, this.colors.green);
+      this.drawWarHudPanel(152, 502, 620, 26);
+      this.drawText("[ ARROWS / ZQSD ] MOVE", 180, 520, 11, this.colors.green);
+      this.drawText("[ SPACE ] FIRE", 376, 520, 11, this.colors.green);
+      this.drawText("[ X / CTRL ] HEAVY", 522, 520, 11, this.colors.green);
+      this.drawText("[ ESC ] TITLE", 676, 520, 11, this.colors.green);
+      this.drawWarHudPanel(780, 502, 168, 26, threatColor);
+      this.drawText(`THREAT LEVEL: ${threat}`, 794, 520, 11, threatColor);
     };
 
     Game.prototype.warGamePilotPlayer = function () {
@@ -1137,20 +1901,43 @@
     Game.prototype.drawWarConsoleGrid = function (alpha) {
       const ctx = this.ctx;
       ctx.save();
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.globalAlpha = alpha * 0.42;
+      ctx.strokeStyle = "rgba(57,255,104,0.30)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= this.width; x += 10) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, this.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= this.height; y += 10) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(this.width, y);
+        ctx.stroke();
+      }
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = this.colors.greenSoft;
-      ctx.lineWidth = 1;
       for (let x = 40; x < this.width; x += 40) {
         ctx.beginPath();
-        ctx.moveTo(x, 70);
-        ctx.lineTo(x, this.height - 40);
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, this.height);
         ctx.stroke();
       }
       for (let y = 80; y < this.height; y += 32) {
         ctx.beginPath();
-        ctx.moveTo(28, y);
-        ctx.lineTo(this.width - 28, y);
+        ctx.moveTo(0, y);
+        ctx.lineTo(this.width, y);
         ctx.stroke();
+      }
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = this.colors.green;
+      for (let x = 4; x < this.width; x += 20) {
+        for (let y = 4; y < this.height; y += 20) {
+          ctx.fillRect(x, y, 1, 1);
+        }
       }
       ctx.restore();
     };
@@ -1185,11 +1972,54 @@
     Game.prototype.drawWarScanlines = function () {
       const ctx = this.ctx;
       ctx.save();
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.15;
       ctx.fillStyle = "#000";
       for (let y = 0; y < this.height; y += 4) ctx.fillRect(0, y, this.width, 2);
+      ctx.globalAlpha = 0.22;
+      const halo = ctx.createRadialGradient(this.width / 2, this.height / 2, 120, this.width / 2, this.height / 2, this.width * 0.72);
+      halo.addColorStop(0, "rgba(57,255,104,0.06)");
+      halo.addColorStop(0.58, "rgba(0,0,0,0)");
+      halo.addColorStop(1, "rgba(0,0,0,0.88)");
+      ctx.fillStyle = halo;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.globalAlpha = 0.052 + Math.sin(performance.now() / 180) * 0.018;
+      ctx.fillStyle = this.colors.green;
+      ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     };
+  }
+
+  function createWarCity(options) {
+    return Object.assign({}, options, {
+      active: true,
+      lost: false
+    });
+  }
+
+  function createWarNode(options) {
+    return {
+      name: options.name,
+      x: options.x,
+      y: options.y,
+      hp: options.hp,
+      maxHp: options.hp,
+      active: true,
+      destroyed: false,
+      core: !!options.core
+    };
+  }
+
+  function rotateWarAngleTowards(from, to, step) {
+    const delta = normalizeWarAngle(to - from);
+    if (Math.abs(delta) <= step) return to;
+    return from + Math.sign(delta) * step;
+  }
+
+  function normalizeWarAngle(angle) {
+    let value = angle;
+    while (value > Math.PI) value -= Math.PI * 2;
+    while (value < -Math.PI) value += Math.PI * 2;
+    return value;
   }
 
   function moveWarList(list, dt) {
@@ -1201,16 +2031,6 @@
       item.y += item.vy * dt;
       item.life -= dt;
     }
-  }
-
-  function drawWarPolyline(ctx, points) {
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point[0], point[1]);
-      else ctx.lineTo(point[0], point[1]);
-    });
-    ctx.closePath();
-    ctx.stroke();
   }
 
   function warDistance(a, b) {
@@ -1252,6 +2072,27 @@
 
   function randomItem(list) {
     return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function formatWarVictimNumber(value) {
+    const integer = Math.max(0, Math.round(Number(value) || 0));
+    if (integer >= 1000000000) return formatWarBillions(integer);
+    return String(integer).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+
+  function formatWarVictims(value) {
+    const integer = Math.max(0, Math.round(Number(value) || 0));
+    if (integer >= 1000000000) return `${formatWarBillions(integer)} de victimes`;
+    return `${formatWarVictimNumber(integer)} VICTIMES`;
+  }
+
+  function formatWarBillions(value) {
+    const rounded = Math.round((value / 1000000000) * 10) / 10;
+    const number = rounded.toLocaleString("fr-FR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+    return `${number} ${rounded === 1 ? "milliard" : "milliards"}`;
   }
 
   function clamp(value, min, max) {

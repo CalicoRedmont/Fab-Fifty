@@ -5,23 +5,26 @@
 
   function installScreens(Game) {
     Game.prototype.draw = function () {
-      if (this.screen === "title") return this.drawTitle();
-      if (this.screen === "how") return this.drawHow();
-      if (this.screen === "credits") return this.drawCredits();
-      if (this.screen === "commands") return this.drawCommands();
-      if (this.screen === "playerSelect") return this.drawPlayerSelect();
-      if (this.screen === "opponentSelect") return this.drawOpponentSelect();
-      if (this.screen === "setupSelect") return this.drawSetupSelect();
-      if (this.screen === "tournamentOpponents") return this.drawTournamentOpponents();
-      if (this.screen === "tournamentSetup") return this.drawTournamentSetup();
-      if (this.screen === "tournamentBracket") return this.drawTournamentBracket();
-      if (this.screen === "tournamentVictory") return this.drawTournamentVictory();
-      if (this.screen === "tournamentIntro") return this.drawTournamentIntro();
-      if (this.screen === "play") return this.drawPlay();
-      if (this.screen === "pause") return this.drawPause();
-      if (this.screen === "matchEnd") return this.drawMatchEnd();
-      if (this.screen === "tournamentEnd") return this.drawTournamentEnd();
-      this.drawTitle();
+      if (this.screen === "title") this.drawTitle();
+      else if (this.screen === "how") this.drawHow();
+      else if (this.screen === "credits") this.drawCredits();
+      else if (this.screen === "commands") this.drawCommands();
+      else if (this.screen === "playerSelect") this.drawPlayerSelect();
+      else if (this.screen === "opponentSelect") this.drawOpponentSelect();
+      else if (this.screen === "setupSelect") this.drawSetupSelect();
+      else if (this.screen === "tournamentOpponents") this.drawTournamentOpponents();
+      else if (this.screen === "tournamentSetup") this.drawTournamentSetup();
+      else if (this.screen === "tournamentBracket") this.drawTournamentBracket();
+      else if (this.screen === "tournamentVictory") this.drawTournamentVictory();
+      else if (this.screen === "tournamentIntro") this.drawTournamentIntro();
+      else if (this.screen === "tournamentPhaseTransition") this.drawTournamentPhaseTransition();
+      else if (this.screen === "tournamentSummary") this.drawTournamentSummary();
+      else if (this.screen === "play") this.drawPlay();
+      else if (this.screen === "pause") this.drawPause();
+      else if (this.screen === "matchEnd") this.drawMatchEnd();
+      else if (this.screen === "tournamentEnd") this.drawTournamentEnd();
+      else this.drawTitle();
+      if (this.tournamentExitPrompt) this.drawTournamentExitPrompt();
     };
 
     Game.prototype.drawText = function (str, x, y, size, color = this.colors.green, align = "left") {
@@ -406,11 +409,11 @@
       this.fillBackground();
       this.drawFrame();
       this.neon("BAD PONG TOURNAMENT", 54, 70, 28, this.colors.green);
-      this.drawText("Entrée sélectionne. RANDOM ALL complète la liste. START crée le tableau.", 54, 98, 13, this.colors.white);
+      this.drawText("Entrée sélectionne. TOUT LE MONDE inscrit tous les joueurs et mélange l'ordre. START crée le tableau.", 54, 98, 12, this.colors.white);
       const players = this.tournamentSelectablePlayers ? this.tournamentSelectablePlayers() : CFG.PLAYERS.filter(player => player.id !== "machine");
       const tournamentCount = this.selected.tournamentOpponents.length + 1;
       const entries = players.concat([
-        { id: "random-all", name: "RANDOM ALL", initials: "?", difficulty: "AUTO", line: "Tirage automatique", files: [] },
+        { id: "all-random", name: "TOUT LE MONDE", initials: "ALL", difficulty: "MIX", line: "Sélectionne tout le monde et mélange l'ordre d'inscription.", files: [] },
         { id: "start", name: "START", initials: "GO", difficulty: `${tournamentCount} JOUEUR${tournamentCount > 1 ? "S" : ""}`, line: "Lancer la configuration", files: [] }
       ]);
       this.drawPlayerGrid(entries, this.tournamentCursor, 54, 120, 4, 132, 70, this.selected.humanId, this.selected.tournamentOpponents);
@@ -429,10 +432,10 @@
       const rows = [
         ["MODE TOURNOI", CFG.matchModeById(this.selected.tournamentMode).label, CFG.matchModeById(this.selected.tournamentMode).description],
         ["RAQUETTE", CFG.paddleTypeById(this.selected.tournamentPaddle).label, CFG.paddleTypeById(this.selected.tournamentPaddle).description],
-        ["MACHINES", "NORMAL", "Ajoutées en normal pour compléter le tableau."]
+        ["MACHINES", "AUTO", "Ajoutées pour compléter le tableau, matchs Machine simulés."]
       ];
       rows.forEach((row, index) => this.drawOptionRow(row, index, 178 + index * 74, index === this.setupCursor));
-      this.drawText("Élimination directe. Le tableau est complété à 2/4/8/16 joueurs.", 480, 432, 14, this.colors.white, "center");
+      this.drawText("Élimination directe. Tableau mélangé, seed stable, puissance de 2 supérieure.", 480, 432, 13, this.colors.white, "center");
       this.drawText("← → changer   Entrée créer le tableau", 480, 460, 15, this.colors.amber, "center");
       this.drawScanlines();
     };
@@ -453,7 +456,7 @@
       this.drawText(`Mode : ${mode.label}   Raquette : ${CFG.paddleTypeById(this.tournament.paddleType).label}`, 480, 296, 15, this.colors.white, "center");
       this.drawText("Niveau Machine : NORMAL", 480, 320, 14, this.colors.green, "center");
       this.drawText("Premier à 5 points.", 480, 350, 15, this.colors.amber, "center");
-      this.drawText("Entrée : lancer le match   Échap : menu", 480, 386, 15, this.colors.green, "center");
+      this.drawText("Entrée : lancer le match   Échap/Home : accueil", 480, 386, 15, this.colors.green, "center");
       this.drawScanlines();
     };
 
@@ -473,6 +476,10 @@
 
       this.drawBracketGrid(42, 166, 620, 270);
       this.drawTournamentSidePanel(684, 166, 230, 270);
+      const humans = this.tournament.humanParticipants ? this.tournament.humanParticipants.length : Math.max(0, (this.tournament.participants || []).length - (this.tournament.machineCount || 0));
+      const machines = this.tournament.machineCount || 0;
+      const total = this.tournament.participants ? this.tournament.participants.length : humans + machines;
+      this.drawText(`SEED ${this.tournament.seed}   JOUEURS ${humans}   MACHINES ${machines}   PARTICIPANTS ${total}`, 42, 448, 10, this.colors.green);
 
       const fromPause = this.tournamentBracketContext === "pause";
       if (fromPause) {
@@ -487,7 +494,10 @@
         const next = this.getCurrentTournamentMatch && this.getCurrentTournamentMatch();
         this.drawText(next ? `PROCHAIN MATCH : ${this.tournamentMatchLabel(next)}` : "Calcul du prochain match...", 480, 462, 12, this.colors.white, "center");
         this.drawArcadeButton(320, 474, 320, 34, "LANCER LE PROCHAIN MATCH", this.colors.amber);
-        this.drawText("Entrée : lancer   Échap : menu", 480, 524, 12, this.colors.green, "center");
+        const summaryId = this.tournamentSummaryMatchId || this.tournament.lastSimulatedMatchId;
+        const summaryMatch = summaryId && this.findTournamentMatch ? this.findTournamentMatch(summaryId) : null;
+        const summaryHint = summaryMatch && summaryMatch.status === "simulated" ? "   V : résumé simulé" : "";
+        this.drawText(`Entrée : lancer${summaryHint}   Échap/Home : accueil`, 480, 524, 12, this.colors.green, "center");
       }
       this.drawScanlines();
     };
@@ -538,18 +548,23 @@
       const a = this.tournamentSlotValue(match, "A");
       const b = this.tournamentSlotValue(match, "B");
       const current = this.tournament.currentMatchId === match.id && match.status === "current";
-      const completed = match.status === "completed";
+      const completed = this.isTournamentMatchResolved ? this.isTournamentMatchResolved(match) : match.status === "completed";
+      const scored = this.isTournamentMatchScored ? this.isTournamentMatchScored(match) : match.status === "completed";
+      const simulated = match.status === "simulated";
+      const advanced = match.status === "advanced";
       const ctx = this.ctx;
-      const border = current ? this.colors.amber : completed ? this.colors.green : this.colors.white;
+      const border = current ? this.colors.amber : simulated ? this.colors.blue : advanced ? this.colors.amber : completed ? this.colors.green : this.colors.white;
       const font = pos.h < 30 ? 8 : 10;
       ctx.save();
-      ctx.fillStyle = current ? "rgba(255,208,79,0.13)" : "rgba(0,0,0,0.86)";
+      ctx.fillStyle = current ? "rgba(255,208,79,0.13)" : simulated ? "rgba(112,168,255,0.12)" : advanced ? "rgba(255,208,79,0.10)" : "rgba(0,0,0,0.86)";
       ctx.fillRect(pos.x, pos.y, pos.w, pos.h);
       ctx.strokeStyle = border;
       ctx.lineWidth = current || completed ? 2 : 1;
       ctx.strokeRect(pos.x, pos.y, pos.w, pos.h);
       this.drawText(match.id, pos.x + 4, pos.y + 10, 8, current ? this.colors.amber : this.colors.green);
-      if (completed) this.drawText(`${match.scoreA}-${match.scoreB}`, pos.x + pos.w - 5, pos.y + 10, 8, this.colors.amber, "right");
+      if (scored) this.drawText(`${match.scoreA}-${match.scoreB}`, pos.x + pos.w - 5, pos.y + 10, 9, this.colors.amber, "right");
+      if (simulated) this.drawText("SIM", pos.x + pos.w - 29, pos.y + pos.h - 5, 7, this.colors.blue);
+      if (advanced) this.drawText("QUALIF", pos.x + pos.w - 43, pos.y + pos.h - 5, 7, this.colors.amber);
       const yA = pos.y + pos.h * 0.46;
       const yB = pos.y + pos.h * 0.82;
       this.drawTournamentSlotLine(a, completed && !!a.id && match.winner === a.id, pos.x + 11, yA, pos.w - 18, font);
@@ -580,18 +595,213 @@
         if (match.status !== "current" && match.status !== "upcoming") return false;
         const a = this.tournamentSlotValue(match, "A");
         const b = this.tournamentSlotValue(match, "B");
-        return a.label && b.label && a.label !== "À définir" && b.label !== "À définir";
+        return a.resolved && b.resolved && !!a.id && !!b.id;
+      }).sort((a, b) => {
+        if (this.compareTournamentPlayableMatches) return this.compareTournamentPlayableMatches(a, b);
+        return a.matchIndex - b.matchIndex;
       }).slice(0, 8);
       if (!upcoming.length) {
         this.drawText("Calcul en cours...", x + 16, y + 64, 12, this.colors.white);
-        return;
-      }
-      upcoming.forEach((match, index) => {
+      } else upcoming.forEach((match, index) => {
         const isCurrent = current && current.id === match.id;
         const yy = y + 62 + index * 24;
         const label = compactName(this.tournamentMatchLabel(match), 28);
         this.drawText(`${isCurrent ? "▶ " : "  "}${label}`, x + 14, yy, 10, isCurrent ? this.colors.amber : this.colors.green);
       });
+
+      const locked = this.tournament.matches.filter(match => {
+        if (match.status !== "upcoming") return false;
+        const a = this.tournamentSlotValue(match, "A");
+        const b = this.tournamentSlotValue(match, "B");
+        return !a.resolved || !b.resolved || !a.id || !b.id;
+      }).slice(0, 4);
+      if (locked.length) {
+        const startY = y + 62 + Math.min(upcoming.length, 5) * 24 + 22;
+        this.drawText("VERROUILLÉS", x + w / 2, startY, 10, this.colors.cold, "center");
+        locked.forEach((match, index) => {
+          this.drawText(compactName(this.tournamentMatchLabel(match), 30), x + 14, startY + 22 + index * 20, 9, this.colors.cold);
+        });
+      }
+
+      const summaryId = this.tournamentSummaryMatchId || this.tournament.lastSimulatedMatchId;
+      const summaryMatch = summaryId && this.findTournamentMatch ? this.findTournamentMatch(summaryId) : null;
+      if (summaryMatch && summaryMatch.summaryData && summaryMatch.status === "simulated") {
+        const playerA = this.tournamentSlotValue(summaryMatch, "A");
+        const playerB = this.tournamentSlotValue(summaryMatch, "B");
+        this.drawText("MATCH SIMULÉ", x + w / 2, y + h - 58, 11, this.colors.blue, "center");
+        this.drawText(`${compactName(playerA.label, 9)} ${summaryMatch.scoreA}-${summaryMatch.scoreB} ${compactName(playerB.label, 9)}`, x + w / 2, y + h - 40, 10, this.colors.amber, "center");
+        this.drawArcadeButton(708, 404, 182, 24, "VOIR LE RÉSUMÉ", this.colors.blue);
+      } else {
+        const automaticId = this.tournament.lastAutomaticMatchId;
+        const automaticMatch = automaticId && this.findTournamentMatch ? this.findTournamentMatch(automaticId) : null;
+        if (automaticMatch && automaticMatch.status === "advanced") {
+          const winner = this.tournamentPlayerById(automaticMatch.winner);
+          this.drawText("QUALIF HUMAIN", x + w / 2, y + h - 50, 11, this.colors.amber, "center");
+          this.drawText(`${compactName(winner.name, 18)} avance`, x + w / 2, y + h - 30, 10, this.colors.white, "center");
+        }
+      }
+    };
+
+    Game.prototype.drawTournamentPhaseTransition = function () {
+      const phase = this.tournamentPhaseTransition;
+      if (!phase) return this.drawTournamentBracket();
+      const t = performance.now() / 1000 - (phase.startedAt || performance.now() / 1000);
+      this.fillBackground();
+      this.drawPhaseBackdrop(t);
+      this.drawFrame();
+      this.ctx.save();
+      this.ctx.globalAlpha = this.smooth(0, 0.45, t);
+      this.neon(phase.title, 480, 82, phase.count === 2 ? 58 : 48, this.colors.amber, "center");
+      this.neon(phase.subtitle, 480, 122, 22, this.colors.green, "center");
+      this.ctx.restore();
+
+      if (phase.count === 2) {
+        this.drawFinalistsFaceOff(phase.participants, t);
+      } else {
+        this.drawQualifiedGrid(phase.participants, phase.count === 8 ? 4 : 2, t);
+      }
+
+      this.drawArcadeButton(340, 476, 280, 34, "CONTINUER", this.colors.amber);
+      this.drawText("Entrée / Espace / clic : continuer", 480, 528, 12, this.colors.green, "center");
+      this.drawScanlines();
+    };
+
+    Game.prototype.drawPhaseBackdrop = function (t) {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.58)";
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.strokeStyle = "rgba(57,255,104,0.16)";
+      ctx.lineWidth = 1;
+      const offset = (t * 22) % 32;
+      for (let x = -32 + offset; x < this.width + 32; x += 32) {
+        ctx.beginPath();
+        ctx.moveTo(x, 40);
+        ctx.lineTo(x - 160, this.height - 42);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(255,208,79,0.06)";
+      ctx.fillRect(42, 146, 876, 284);
+      ctx.restore();
+    };
+
+    Game.prototype.drawQualifiedGrid = function (participants, cols, t) {
+      const count = participants.length;
+      const rows = Math.ceil(count / cols);
+      const tileW = cols === 4 ? 184 : 214;
+      const tileH = cols === 4 ? 122 : 148;
+      const gapX = cols === 4 ? 18 : 34;
+      const gapY = 18;
+      const totalW = cols * tileW + (cols - 1) * gapX;
+      const totalH = rows * tileH + (rows - 1) * gapY;
+      const startX = (this.width - totalW) / 2;
+      const startY = cols === 4 ? 158 : 168;
+      participants.forEach((player, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const p = this.smooth(0.12 + index * 0.04, 0.62 + index * 0.04, t);
+        const x = startX + col * (tileW + gapX);
+        const y = startY + row * (tileH + gapY) + (1 - p) * 18;
+        this.ctx.save();
+        this.ctx.globalAlpha = p;
+        this.drawQualifiedCard(player, x, y, tileW, Math.min(tileH, totalH), cols === 4 ? 64 : 82);
+        this.ctx.restore();
+      });
+    };
+
+    Game.prototype.drawQualifiedCard = function (player, x, y, w, h, portraitSize) {
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(0,0,0,0.82)";
+      this.ctx.fillRect(x, y, w, h);
+      this.ctx.strokeStyle = this.isMachinePlayer && this.isMachinePlayer(player, player.id) ? this.colors.blue : this.colors.green;
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeRect(x, y, w, h);
+      this.drawPortrait(player, x + 12, y + 14, portraitSize, portraitSize, true);
+      this.drawTileName(player.name, x + portraitSize + 26, y + 42, w - portraitSize - 38, this.colors.white);
+      this.drawText(this.participantTypeLabel(player), x + portraitSize + 26, y + 74, 11, this.colors.amber);
+      this.ctx.restore();
+    };
+
+    Game.prototype.drawFinalistsFaceOff = function (participants, t) {
+      const left = participants[0];
+      const right = participants[1];
+      const p = this.smooth(0.1, 0.7, t);
+      this.ctx.save();
+      this.ctx.globalAlpha = p;
+      if (left) this.drawFinalistCard(left, 126 - (1 - p) * 34, 172, 260, 244, "FINALISTE A");
+      if (right) this.drawFinalistCard(right, 574 + (1 - p) * 34, 172, 260, 244, "FINALISTE B");
+      this.neon("VS", 480, 310, 54, this.colors.red, "center");
+      this.ctx.restore();
+    };
+
+    Game.prototype.drawFinalistCard = function (player, x, y, w, h, label) {
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(0,0,0,0.86)";
+      this.ctx.fillRect(x, y, w, h);
+      this.ctx.strokeStyle = this.colors.amber;
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeRect(x, y, w, h);
+      this.drawText(label, x + w / 2, y + 28, 13, this.colors.green, "center");
+      this.drawPortrait(player, x + 55, y + 48, 150, 150, true);
+      this.neon(compactName(player.name, 15), x + w / 2, y + 220, 24, this.colors.white, "center");
+      this.drawText(this.participantTypeLabel(player), x + w / 2, y + 238, 12, this.colors.amber, "center");
+      this.ctx.restore();
+    };
+
+    Game.prototype.participantTypeLabel = function (player) {
+      if (this.isMachinePlayer && this.isMachinePlayer(player, player && player.id)) return "Machine";
+      return "Humain";
+    };
+
+    Game.prototype.drawTournamentSummary = function () {
+      const match = this.findTournamentMatch ? this.findTournamentMatch(this.tournamentSummaryMatchId) : null;
+      const summary = match && match.summaryData;
+      this.fillBackground();
+      this.drawFrame();
+      this.neon("RÉSUMÉ DU MATCH", 480, 86, 34, this.colors.blue, "center");
+      if (!match || !summary) {
+        this.drawText("Aucun résumé disponible.", 480, 260, 18, this.colors.amber, "center");
+        this.drawArcadeButton(350, 476, 260, 34, "RETOUR AU TABLEAU", this.colors.green);
+        this.drawScanlines();
+        return;
+      }
+      const a = this.tournamentSlotValue(match, "A");
+      const b = this.tournamentSlotValue(match, "B");
+      const winner = this.tournamentPlayerById(summary.winnerId);
+      this.panel(126, 126, 708, 316, 0.84);
+      this.drawText(`${match.id} ${match.roundLabel}`, 480, 164, 16, this.colors.green, "center");
+      this.neon(`${compactName(a.label, 14)} ${match.scoreA}-${match.scoreB} ${compactName(b.label, 14)}`, 480, 212, 28, this.colors.amber, "center");
+      this.drawText(`Vainqueur : ${winner.name}`, 480, 246, 17, this.colors.white, "center");
+      const events = summary.events || [];
+      events.slice(0, 5).forEach((event, index) => {
+        this.drawText(`> ${event}`, 170, 296 + index * 24, 13, index === events.length - 1 ? this.colors.amber : this.colors.green);
+      });
+      this.drawArcadeButton(350, 476, 260, 34, "RETOUR AU TABLEAU", this.colors.green);
+      this.drawText("Entrée / Espace / Échap : retour", 480, 528, 12, this.colors.green, "center");
+      this.drawScanlines();
+    };
+
+    Game.prototype.drawTournamentExitPrompt = function () {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.74)";
+      ctx.fillRect(0, 0, this.width, this.height);
+      this.panel(210, 166, 540, 230, 0.92);
+      this.neon("Quitter le tournoi ?", 480, 218, 28, this.colors.amber, "center");
+      const saved = this.tournamentExitPrompt && this.tournamentExitPrompt.saved;
+      const text = saved
+        ? "Votre progression dans le tournoi en cours sera sauvegardée. Voulez-vous vraiment retourner à l'accueil ?"
+        : "La progression actuelle risque d'être perdue. Voulez-vous vraiment quitter ?";
+      this.wrapText(text, 265, 256, 430, 22, this.colors.white, "center");
+      const buttons = this.tournamentExitButtons ? this.tournamentExitButtons() : [];
+      buttons.forEach((button, index) => {
+        const selected = index === this.tournamentExitConfirmIndex;
+        const color = index === 0 ? this.colors.green : this.colors.red;
+        this.drawArcadeButton(button.x, button.y, button.w, button.h, button.label, selected ? this.colors.amber : color);
+        if (selected) this.drawText("▶", button.x - 18, button.y + 23, 16, this.colors.amber);
+      });
+      this.drawText("Échap : continuer le tournoi", 480, 386, 12, this.colors.green, "center");
+      ctx.restore();
     };
 
     Game.prototype.drawTournamentVictory = function () {
@@ -957,8 +1167,10 @@
       this.ctx.fillRect(0, 0, this.width, this.height);
       this.ctx.translate(this.width / 2, this.height / 2 + 12);
       this.ctx.scale(pulse, pulse);
-      this.neon(value, 0, 0, value === "GO!" ? 72 : 96, value === "GO!" ? this.colors.amber : this.colors.green, "center");
-      this.drawText("READY FOR BAD PONG", 0, 46, 15, this.colors.white, "center");
+      const finalCue = value === "GO!" || value === "REPRISE";
+      const size = value === "REPRISE" ? 62 : value === "GO!" ? 72 : 96;
+      this.neon(value, 0, 0, size, finalCue ? this.colors.amber : this.colors.green, "center");
+      this.drawText(this.countdownKind === "resume" ? "REPRISE DU MATCH" : "READY FOR BAD PONG", 0, 46, 15, this.colors.white, "center");
       this.ctx.restore();
     };
 
@@ -1254,7 +1466,7 @@
       this.wrapText(this.endMessage, 190, 238, 580, 24, this.colors.white, "center");
       this.wrapText(this.endLoserComment, 170, 306, 620, 22, this.colors.amber, "center");
       if (this.currentMatchConfig && this.currentMatchConfig.tournamentMatch) {
-        this.drawText("Entrée : match suivant   Échap : menu", 480, 404, 16, this.colors.green, "center");
+        this.drawText("Entrée : tableau du tournoi   Échap/Home : accueil", 480, 404, 16, this.colors.green, "center");
       } else {
         this.drawText("R ou Entrée : replay   Échap : menu principal", 480, 404, 16, this.colors.green, "center");
       }

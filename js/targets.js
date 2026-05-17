@@ -232,7 +232,7 @@
         quote: player.line || "IA locale. Sourire inquiétant."
       };
     }
-    if (player.id === "random" || player.id === "random-all") {
+    if (player.id === "random" || player.id === "random-all" || player.id === "all-random") {
       return {
         shortProfile: "tirage au sort",
         profile: "tirage au sort",

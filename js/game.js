@@ -42,6 +42,11 @@
       this.lastLoserCommentIndex = -1;
       this.tournamentChampionId = "";
       this.tournamentVictoryStartedAt = 0;
+      this.tournamentExitPrompt = null;
+      this.tournamentExitConfirmIndex = 0;
+      this.tournamentPhaseTransition = null;
+      this.tournamentSummaryMatchId = "";
+      this.countdownKind = "start";
       this.homeButtonFocused = false;
 
       this.menuIndex = 0;
@@ -169,6 +174,7 @@
       this.paddleSpeedMultiplier = 1;
       this.matchCountdown = 0;
       this.lastCountdownCue = "";
+      this.countdownKind = "start";
       this.machineBoosterTimer = 2.5;
       this.scoreToWin = CFG.SCORE_TO_WIN;
       this.currentMatchConfig = null;
@@ -184,6 +190,10 @@
       this.tournamentBracketContext = "setup";
       this.tournamentChampionId = "";
       this.tournamentVictoryStartedAt = 0;
+      this.tournamentExitPrompt = null;
+      this.tournamentExitConfirmIndex = 0;
+      this.tournamentPhaseTransition = null;
+      this.tournamentSummaryMatchId = "";
     }
 
     key(name) {
@@ -317,6 +327,7 @@
       this.messageTime = Math.max(0, this.messageTime - safeDt);
       this.fullscreenMessageTime = Math.max(0, this.fullscreenMessageTime - safeDt);
 
+      if (this.tournamentExitPrompt) return;
       if (this.screen === "opponentSelect") this.updateRandomRoulette(safeDt);
       if (this.screen !== "play") return;
 
@@ -553,6 +564,7 @@
 
     finishMatch(winnerSide) {
       winnerSide = this.applyFabienBirthdayRule(winnerSide);
+      winnerSide = this.applyTournamentHumanMachineRule(winnerSide);
       const loserSide = winnerSide === "left" ? "right" : "left";
       this.endWinnerSide = winnerSide;
       this.endTitle = `${this.sideName(winnerSide)} GAGNE`;
@@ -568,7 +580,7 @@
         if (this.tournament && this.tournament.result && this.tournament.result.championId) {
           this.showTournamentVictory();
         } else {
-          this.showTournamentBracket("afterMatch");
+          this.showNextTournamentScreen("afterMatch");
         }
         return;
       } else {
@@ -587,6 +599,16 @@
       if (leftIsFabien && rightIsMachine) return this.forceMatchWinner("right");
       if (rightIsFabien && leftIsMachine) return this.forceMatchWinner("left");
       return winnerSide;
+    }
+
+    applyTournamentHumanMachineRule(winnerSide) {
+      if (!this.currentMatchConfig || !this.currentMatchConfig.tournamentMatch) return winnerSide;
+      const leftMachine = this.isMachinePlayerId(this.currentMatchConfig.leftPlayerId);
+      const rightMachine = this.isMachinePlayerId(this.currentMatchConfig.rightPlayerId);
+      if (leftMachine === rightMachine) return winnerSide;
+      const humanSide = leftMachine ? "right" : "left";
+      if (winnerSide !== humanSide) this.forceMatchWinner(humanSide);
+      return humanSide;
     }
 
     forceMatchWinner(winnerSide) {
@@ -628,10 +650,14 @@
       const rightScore = this.right.score;
       item.scoreA = leftScore;
       item.scoreB = rightScore;
+      item.score = { A: leftScore, B: rightScore };
       item.winner = winnerSide === "left" ? this.currentMatchConfig.leftPlayerId : this.currentMatchConfig.rightPlayerId;
+      item.winnerId = item.winner;
       item.status = "completed";
       item.completedAt = Date.now();
-      this.tournament.completedTournamentMatches.push(item.id);
+      if (!this.tournament.completedTournamentMatches.includes(item.id)) {
+        this.tournament.completedTournamentMatches.push(item.id);
+      }
       const next = this.setNextTournamentMatch();
       if (!next) this.finishTournament();
     }
@@ -639,7 +665,7 @@
     advanceTournament() {
       if (!this.tournament) return this.startTitle();
       if (this.tournament.result && this.tournament.result.championId) return this.startTitle();
-      this.startTournamentMatch();
+      this.showNextTournamentScreen("afterMatch");
     }
 
     finishTournament() {
@@ -649,7 +675,7 @@
       if (!championId) return;
 
       const humanId = this.tournament.humanId;
-      const completed = this.tournament.matches.filter(match => match.status === "completed");
+      const completed = this.tournament.matches.filter(match => this.isTournamentMatchScored(match));
       let totalHuman = 0;
       let totalOpponents = 0;
       let best = null;
@@ -680,6 +706,7 @@
         worst,
         won: championId === humanId
       };
+      this.tournament.status = "completed";
       this.stats = window.FabienStorage.recordTournament(this.tournament.result);
       this.audio.play(this.tournament.result.won ? "win" : "lose");
     }
@@ -781,6 +808,7 @@
       this.paddleSpeedMultiplier = 1;
       this.matchCountdown = 4;
       this.lastCountdownCue = "";
+      this.countdownKind = "start";
       this.machineBoosterTimer = 1.8 + Math.random() * 2.8;
       this.lastScoredSide = "";
       this.speedBoosterArmed = { left: false, right: false };
@@ -827,12 +855,16 @@
         return;
       }
 
-      const bracket = createTournamentBracket(participants);
+      const seed = createTournamentSeed();
+      const bracket = createTournamentBracket(participants, { seed });
 
       this.tournament = {
+        tournamentId: `tour-${seed.toString(16)}-${Date.now().toString(36)}`,
+        seed,
         humanId: this.selected.humanId,
         humanParticipants: participants,
         participants: bracket.participants,
+        bracketSlots: bracket.bracketSlots,
         playersById: bracket.playersById,
         bracketSize: bracket.bracketSize,
         machineCount: bracket.machineCount,
@@ -842,11 +874,17 @@
         aiDifficulty: this.selected.tournamentDifficulty,
         paddleType: this.selected.tournamentPaddle,
         currentMatchId: null,
+        currentPhase: "setup",
+        status: "active",
+        shownTransitions: {},
+        lastSimulatedMatchId: "",
+        lastAutomaticMatchId: "",
+        summaryReturnContext: "afterMatch",
         completedTournamentMatches: [],
         result: null
       };
       this.setNextTournamentMatch();
-      this.showTournamentBracket("setup");
+      this.showNextTournamentScreen("setup");
     }
 
     normalizeTournamentParticipants() {
@@ -866,7 +904,8 @@
         .filter(player => player.id !== this.selected.humanId)
         .map(player => player.id)
         .sort(() => Math.random() - 0.5);
-      return pool.slice(0, Math.min(count, pool.length));
+      const targetCount = Number.isFinite(count) ? count : pool.length;
+      return pool.slice(0, Math.min(targetCount, pool.length));
     }
 
     findTournamentMatch(id) {
@@ -904,13 +943,13 @@
         };
       }
       const source = this.findTournamentMatch(match[sourceKey]);
-      if (!source || source.status !== "completed") {
-        return { resolved: false, id: null, label: `Gagnant ${match[sourceKey]}` };
+      if (!source || !this.isTournamentMatchResolved(source)) {
+        return { resolved: false, id: null, label: `Vainqueur ${match[sourceKey]}` };
       }
       return {
         resolved: !!source.winner,
         id: source.winner || null,
-        label: source.winner ? this.tournamentPlayerById(source.winner).name : `Gagnant ${match[sourceKey]}`
+        label: source.winner ? this.tournamentPlayerById(source.winner).name : `Vainqueur ${match[sourceKey]}`
       };
     }
 
@@ -920,17 +959,242 @@
       return `${match.id} ${a.label} vs ${b.label}`;
     }
 
+    isTournamentMatchResolved(match) {
+      return !!match && (match.status === "completed" || match.status === "simulated" || match.status === "advanced");
+    }
+
+    isTournamentMatchScored(match) {
+      return !!match && (match.status === "completed" || match.status === "simulated" || match.status === "advanced");
+    }
+
+    completeTournamentSimulation(match, slotA, slotB) {
+      if (!match || !slotA.id || !slotB.id || this.isTournamentMatchResolved(match)) return false;
+      const summary = this.simulateMachineMatchSummary(match, slotA.id, slotB.id);
+      match.scoreA = summary.scoreA;
+      match.scoreB = summary.scoreB;
+      match.score = { A: summary.scoreA, B: summary.scoreB };
+      match.winner = summary.winnerId;
+      match.winnerId = summary.winnerId;
+      match.status = "simulated";
+      match.simulated = true;
+      match.completedAt = Date.now();
+      match.summaryData = summary;
+      if (!this.tournament.completedTournamentMatches.includes(match.id)) {
+        this.tournament.completedTournamentMatches.push(match.id);
+      }
+      this.tournament.lastSimulatedMatchId = match.id;
+      this.tournamentSummaryMatchId = match.id;
+      return true;
+    }
+
+    completeTournamentHumanAdvancement(match, slotA, slotB, options = {}) {
+      if (!match || !slotA.id || !slotB.id) return false;
+      if (this.isTournamentMatchResolved(match) && !options.force) return false;
+      const pairing = this.tournamentHumanMachinePairing(slotA, slotB);
+      if (!pairing) return false;
+
+      const winnerSlot = pairing.human;
+      const humanIsA = winnerSlot.id === slotA.id;
+      match.scoreA = humanIsA ? CFG.SCORE_TO_WIN : 0;
+      match.scoreB = humanIsA ? 0 : CFG.SCORE_TO_WIN;
+      match.score = { A: match.scoreA, B: match.scoreB };
+      match.winner = winnerSlot.id;
+      match.winnerId = winnerSlot.id;
+      match.status = "advanced";
+      match.automatic = true;
+      match.automaticReason = options.played ? "played-human-over-machine" : "human-over-machine";
+      match.completedAt = Date.now();
+      if (!this.tournament.completedTournamentMatches.includes(match.id)) {
+        this.tournament.completedTournamentMatches.push(match.id);
+      }
+      this.tournament.lastAutomaticMatchId = match.id;
+      return true;
+    }
+
+    tournamentHumanMachinePairing(slotA, slotB) {
+      if (!slotA || !slotB || !slotA.id || !slotB.id) return null;
+      const aMachine = this.isMachinePlayerId(slotA.id);
+      const bMachine = this.isMachinePlayerId(slotB.id);
+      if (aMachine === bMachine) return null;
+      return {
+        human: aMachine ? slotB : slotA,
+        machine: aMachine ? slotA : slotB
+      };
+    }
+
+    hasHumanPlayedTournamentMatch(humanId, excludedMatchId = "") {
+      if (!this.tournament || !humanId) return false;
+      return this.tournament.matches.some(match => {
+        return match.id !== excludedMatchId
+          && match.status === "completed"
+          && match.winner === humanId;
+      });
+    }
+
+    reopenTournamentMatchAndDependents(match) {
+      if (!this.tournament || !match) return false;
+      const reopened = new Set();
+      const reopen = item => {
+        if (!item || reopened.has(item.id)) return;
+        reopened.add(item.id);
+        item.winner = null;
+        item.winnerId = null;
+        item.status = "upcoming";
+        item.scoreA = null;
+        item.scoreB = null;
+        item.score = null;
+        item.automatic = false;
+        item.automaticReason = "";
+        item.simulated = false;
+        item.summaryData = null;
+        item.completedAt = null;
+        if (this.tournament.currentMatchId === item.id) this.tournament.currentMatchId = null;
+        this.tournament.completedTournamentMatches = this.tournament.completedTournamentMatches.filter(id => id !== item.id);
+        this.tournament.matches.forEach(candidate => {
+          if (candidate.sourceA === item.id || candidate.sourceB === item.id) reopen(candidate);
+        });
+      };
+      reopen(match);
+      if (this.tournament.lastAutomaticMatchId && reopened.has(this.tournament.lastAutomaticMatchId)) {
+        this.tournament.lastAutomaticMatchId = "";
+      }
+      if (this.tournament.lastSimulatedMatchId && reopened.has(this.tournament.lastSimulatedMatchId)) {
+        this.tournament.lastSimulatedMatchId = "";
+      }
+      if (this.tournamentSummaryMatchId && reopened.has(this.tournamentSummaryMatchId)) {
+        this.tournamentSummaryMatchId = "";
+      }
+      if (this.tournament.result) this.tournament.result = null;
+      return reopened.size > 0;
+    }
+
+    simulateMachineMatchSummary(match, playerAId, playerBId) {
+      const playerA = this.tournamentPlayerById(playerAId);
+      const playerB = this.tournamentPlayerById(playerBId);
+      const rng = createSeededRandom(hashTournamentSeed(`${this.tournament.seed}:${match.id}:${playerAId}:${playerBId}`));
+      const ratingA = this.machineRating(playerA);
+      const ratingB = this.machineRating(playerB);
+      const pressure = ratingA - ratingB + (rng() - 0.5) * 1.8;
+      const winnerSide = pressure >= 0 ? "A" : "B";
+      const scoreToWin = CFG.SCORE_TO_WIN;
+      const loserScore = Math.max(0, Math.min(scoreToWin - 1, Math.floor(rng() * scoreToWin)));
+      const closeBonus = Math.abs(pressure) < 0.45 && loserScore < scoreToWin - 1 ? 1 : 0;
+      const finalLoserScore = Math.min(scoreToWin - 1, loserScore + closeBonus);
+      const scoreA = winnerSide === "A" ? scoreToWin : finalLoserScore;
+      const scoreB = winnerSide === "B" ? scoreToWin : finalLoserScore;
+      const winnerId = winnerSide === "A" ? playerAId : playerBId;
+      const loserId = winnerSide === "A" ? playerBId : playerAId;
+      const winner = this.tournamentPlayerById(winnerId);
+      const loser = this.tournamentPlayerById(loserId);
+      const events = [
+        "Handshake protocolaire entre deux IA locales.",
+        `${winner.name} prend l'avantage sur une trajectoire impossible à justifier.`,
+        `${loser.name} tente une correction tardive. Le score refuse.`,
+        `Résultat validé : ${playerA.name} ${scoreA} - ${scoreB} ${playerB.name}.`
+      ];
+      return {
+        type: "simulation",
+        seed: hashTournamentSeed(`${this.tournament.seed}:${match.id}`),
+        matchId: match.id,
+        roundLabel: match.roundLabel,
+        playerAId,
+        playerBId,
+        winnerId,
+        scoreA,
+        scoreB,
+        events
+      };
+    }
+
+    machineRating(player) {
+      const id = player && player.difficulty ? player.difficulty : this.tournament.aiDifficulty;
+      const order = { easy: 1, normal: 2, hard: 3, boss: 4 };
+      return order[id] || order.normal;
+    }
+
+    advanceAutomaticTournamentMatches() {
+      if (!this.tournament) return false;
+      let changed = false;
+      let keepGoing = true;
+      while (keepGoing) {
+        keepGoing = false;
+        for (const match of this.tournament.matches) {
+          const a = this.tournamentSlotValue(match, "A");
+          const b = this.tournamentSlotValue(match, "B");
+          const aMachine = a.id && this.isMachinePlayerId(a.id);
+          const bMachine = b.id && this.isMachinePlayerId(b.id);
+          if (this.isTournamentMatchResolved(match)) {
+            const pairing = this.tournamentHumanMachinePairing(a, b);
+            const humanPlayed = pairing && this.hasHumanPlayedTournamentMatch(pairing.human.id, match.id);
+            if (pairing && match.status === "advanced" && match.automaticReason === "human-over-machine" && !humanPlayed) {
+              keepGoing = this.reopenTournamentMatchAndDependents(match) || keepGoing;
+              changed = changed || keepGoing;
+              continue;
+            }
+            if (pairing && this.isMachinePlayerId(match.winner) && (match.status === "completed" || humanPlayed)) {
+              keepGoing = this.completeTournamentHumanAdvancement(match, a, b, { force: true, played: match.status === "completed" }) || keepGoing;
+            }
+            changed = changed || keepGoing;
+            continue;
+          }
+          if (!a.resolved || !b.resolved) continue;
+          const pairing = this.tournamentHumanMachinePairing(a, b);
+          if (pairing && this.hasHumanPlayedTournamentMatch(pairing.human.id, match.id)) {
+            keepGoing = this.completeTournamentHumanAdvancement(match, a, b) || keepGoing;
+          } else if (a.id && b.id && aMachine && bMachine) {
+            keepGoing = this.completeTournamentSimulation(match, a, b) || keepGoing;
+          }
+          changed = changed || keepGoing;
+        }
+      }
+
+      const final = this.tournament.rounds[this.tournament.rounds.length - 1][0];
+      if (final && this.isTournamentMatchResolved(final) && final.winner && !this.tournament.result) {
+        this.finishTournament();
+      }
+      return changed;
+    }
+
+    isTournamentMatchReady(match) {
+      if (!match || (match.status !== "upcoming" && match.status !== "current")) return false;
+      const a = this.tournamentSlotValue(match, "A");
+      const b = this.tournamentSlotValue(match, "B");
+      return a.resolved && b.resolved && !!a.id && !!b.id;
+    }
+
+    tournamentMatchPlayPriority(match) {
+      if (!this.isTournamentMatchReady(match)) return 99;
+      const a = this.tournamentSlotValue(match, "A");
+      const b = this.tournamentSlotValue(match, "B");
+      const aMachine = this.isMachinePlayerId(a.id);
+      const bMachine = this.isMachinePlayerId(b.id);
+      if (!aMachine && !bMachine) return 0;
+      if (aMachine !== bMachine) return 1;
+      return 2;
+    }
+
+    compareTournamentPlayableMatches(a, b) {
+      const priority = this.tournamentMatchPlayPriority(a) - this.tournamentMatchPlayPriority(b);
+      if (priority) return priority;
+      const round = a.roundIndex - b.roundIndex;
+      if (round) return round;
+      return a.matchIndex - b.matchIndex;
+    }
+
     setNextTournamentMatch() {
       if (!this.tournament) return null;
+      this.advanceAutomaticTournamentMatches();
+      if (this.tournament.result && this.tournament.result.championId) {
+        this.tournament.currentMatchId = null;
+        return null;
+      }
       for (const match of this.tournament.matches) {
         if (match.status === "current") match.status = "upcoming";
       }
-      const next = this.tournament.matches.find(match => {
-        if (match.status !== "upcoming") return false;
-        const a = this.tournamentSlotValue(match, "A");
-        const b = this.tournamentSlotValue(match, "B");
-        return a.resolved && b.resolved && !!a.id && !!b.id;
-      });
+      const playable = this.tournament.matches
+        .filter(match => this.isTournamentMatchReady(match))
+        .sort((a, b) => this.compareTournamentPlayableMatches(a, b));
+      const next = playable[0] || null;
       this.tournament.currentMatchId = next ? next.id : null;
       if (next) next.status = "current";
       return next || null;
@@ -947,10 +1211,91 @@
       this.audio.play("menu");
     }
 
+    showNextTournamentScreen(context = "afterMatch") {
+      if (!this.tournament) return this.startTitle();
+      if (this.tournament.result && this.tournament.result.championId) return this.showTournamentVictory();
+      const next = this.setNextTournamentMatch() || this.getCurrentTournamentMatch();
+      const transition = next ? this.pendingTournamentPhaseTransition(next) : null;
+      if (transition) {
+        this.openTournamentPhaseTransition(transition, context);
+        return;
+      }
+      this.showTournamentBracket(context);
+    }
+
+    pendingTournamentPhaseTransition(nextMatch) {
+      if (!this.tournament || !nextMatch || nextMatch.roundIndex < 0) return null;
+      const entrants = this.qualifiedParticipantsForRound(nextMatch.roundIndex);
+      const count = entrants.length;
+      if (count !== 8 && count !== 4 && count !== 2) return null;
+      const key = `top${count}`;
+      if (this.tournament.shownTransitions && this.tournament.shownTransitions[key]) return null;
+      return {
+        key,
+        count,
+        title: count === 8 ? "TOP 8" : count === 4 ? "TOP 4" : "FINALE",
+        subtitle: count === 8 ? "ENTRÉE EN QUARTS DE FINALE" : count === 4 ? "ENTRÉE EN DEMI-FINALES" : "DERNIER DUEL",
+        participants: entrants
+      };
+    }
+
+    qualifiedParticipantsForRound(roundIndex) {
+      if (!this.tournament) return [];
+      const ids = [];
+      if (roundIndex === 0) {
+        const slots = this.tournament.bracketSlots || [];
+        slots.forEach(id => {
+          if (id && !ids.includes(id)) ids.push(id);
+        });
+      } else {
+        const previous = this.tournament.rounds[roundIndex - 1] || [];
+        previous.forEach(match => {
+          if (this.isTournamentMatchResolved(match) && match.winner && !ids.includes(match.winner)) {
+            ids.push(match.winner);
+          }
+        });
+      }
+      return ids.map(id => this.tournamentPlayerById(id)).filter(Boolean);
+    }
+
+    openTournamentPhaseTransition(transition, returnContext) {
+      this.tournament.shownTransitions[transition.key] = true;
+      this.tournament.currentPhase = transition.key;
+      this.tournamentPhaseTransition = Object.assign({ returnContext }, transition, {
+        startedAt: performance.now() / 1000
+      });
+      this.screen = "tournamentPhaseTransition";
+      this.audio.play("validate");
+    }
+
+    continueTournamentPhaseTransition() {
+      const context = this.tournamentPhaseTransition ? this.tournamentPhaseTransition.returnContext : "afterMatch";
+      this.tournamentPhaseTransition = null;
+      this.showTournamentBracket(context);
+    }
+
+    viewTournamentMatchSummary(matchId) {
+      const match = this.findTournamentMatch(matchId);
+      if (!match || !match.summaryData) return false;
+      this.tournamentSummaryMatchId = match.id;
+      if (this.tournament) this.tournament.summaryReturnContext = this.tournamentBracketContext || "afterMatch";
+      this.screen = "tournamentSummary";
+      this.audio.play("menu");
+      return true;
+    }
+
+    returnFromTournamentSummary() {
+      const context = this.tournament && this.tournament.summaryReturnContext ? this.tournament.summaryReturnContext : "afterMatch";
+      this.showTournamentBracket(context);
+    }
+
     startTournamentMatch() {
       if (!this.tournament) return this.startTitle();
-      const item = this.getCurrentTournamentMatch() || this.setNextTournamentMatch();
-      if (!item) return this.showTournamentBracket("afterMatch");
+      const item = this.setNextTournamentMatch();
+      if (!item) {
+        if (this.tournament.result && this.tournament.result.championId) return this.showTournamentVictory();
+        return this.showTournamentBracket("afterMatch");
+      }
       const playerA = this.tournamentSlotValue(item, "A");
       const playerB = this.tournamentSlotValue(item, "B");
       if (!playerA.resolved || !playerB.resolved || !playerA.id || !playerB.id) {
@@ -983,6 +1328,7 @@
     }
 
     quitMatch() {
+      if (this.currentMatchConfig && this.currentMatchConfig.tournamentMatch && this.openTournamentExitPrompt("match")) return;
       this.message("Partie quittée. La raquette nie toute responsabilité.", 2);
       this.startTitle();
     }
@@ -1037,7 +1383,7 @@
       const rect = this.homeButtonRect();
       if (!inside(x, y, rect.x, rect.y, rect.w, rect.h)) return false;
       this.audio.play("validate");
-      this.startTitle();
+      this.goHome();
       return true;
     }
 
@@ -1046,7 +1392,7 @@
       if (this.homeButtonFocused) {
         if (key === "Enter") {
           this.audio.play("validate");
-          this.startTitle();
+          this.goHome();
           return true;
         }
         if (this.isDirectionalKey(key)) {
@@ -1069,7 +1415,7 @@
 
     shouldFocusHomeButtonFromKey(key) {
       if (key !== "ArrowUp" && key !== "z") {
-        const passiveScreens = ["how", "credits", "tournamentBracket", "tournamentVictory", "tournamentIntro", "matchEnd", "tournamentEnd", "pause"];
+        const passiveScreens = ["how", "credits", "tournamentBracket", "tournamentVictory", "tournamentIntro", "tournamentPhaseTransition", "tournamentSummary", "matchEnd", "tournamentEnd", "pause"];
         return passiveScreens.includes(this.screen) && this.isDirectionalKey(key);
       }
       if (this.screen === "commands") return this.commandsCursor === 0;
@@ -1077,7 +1423,121 @@
       if (this.screen === "playerSelect") return this.playerCursor < 4;
       if (this.screen === "opponentSelect") return this.opponentCursor < 4;
       if (this.screen === "tournamentOpponents") return this.tournamentCursor < 4;
-      return ["how", "credits", "tournamentBracket", "tournamentVictory", "tournamentIntro", "matchEnd", "tournamentEnd", "pause"].includes(this.screen);
+      return ["how", "credits", "tournamentBracket", "tournamentVictory", "tournamentIntro", "tournamentPhaseTransition", "tournamentSummary", "matchEnd", "tournamentEnd", "pause"].includes(this.screen);
+    }
+
+    goHome() {
+      if (this.openTournamentExitPrompt("home")) return true;
+      this.startTitle();
+      return true;
+    }
+
+    isTournamentInProgress() {
+      return !!(this.tournament && (!this.tournament.result || !this.tournament.result.championId));
+    }
+
+    isTournamentScreen() {
+      if (this.screen === "play" || this.screen === "pause" || this.screen === "matchEnd") {
+        return !!(this.currentMatchConfig && this.currentMatchConfig.tournamentMatch);
+      }
+      return [
+        "tournamentBracket",
+        "tournamentIntro",
+        "tournamentPhaseTransition",
+        "tournamentSummary"
+      ].includes(this.screen);
+    }
+
+    openTournamentExitPrompt(reason = "home") {
+      if (!this.isTournamentInProgress() || !this.isTournamentScreen()) return false;
+      this.tournamentExitPrompt = {
+        reason,
+        openedFrom: this.screen,
+        resumeCountdown: this.screen === "play" && !!(this.currentMatchConfig && this.currentMatchConfig.tournamentMatch),
+        saved: !!(window.FabienStorage && window.FabienStorage.saveTournamentState)
+      };
+      this.tournamentExitConfirmIndex = 0;
+      this.audio.play("menu");
+      return true;
+    }
+
+    cancelTournamentExit() {
+      const shouldCountdown = this.tournamentExitPrompt && this.tournamentExitPrompt.resumeCountdown;
+      this.tournamentExitPrompt = null;
+      this.tournamentExitConfirmIndex = 0;
+      if (shouldCountdown) this.armTournamentResumeCountdown();
+      this.audio.play("menu");
+    }
+
+    armTournamentResumeCountdown() {
+      this.matchCountdown = 3;
+      this.lastCountdownCue = "";
+      this.countdownKind = "resume";
+      this.message("Reprise dans 3 secondes.", 1.4);
+    }
+
+    confirmTournamentExit() {
+      if (window.FabienStorage && window.FabienStorage.saveTournamentState && this.tournament) {
+        this.captureTournamentLiveState();
+        window.FabienStorage.saveTournamentState(this.tournament);
+      }
+      this.tournamentExitPrompt = null;
+      this.tournamentPhaseTransition = null;
+      this.tournamentSummaryMatchId = "";
+      this.currentMatchConfig = null;
+      this.tournament = null;
+      this.startTitle();
+    }
+
+    captureTournamentLiveState() {
+      if (!this.currentMatchConfig || !this.currentMatchConfig.tournamentMatch) return;
+      const match = this.currentMatchConfig.tournamentMatch;
+      match.inProgressState = {
+        scoreA: this.left ? this.left.score : null,
+        scoreB: this.right ? this.right.score : null,
+        elapsed: this.elapsed || 0,
+        screen: this.screen
+      };
+    }
+
+    handleTournamentExitPromptKey(key) {
+      if (!this.tournamentExitPrompt) return false;
+      if (key === "Escape") {
+        this.cancelTournamentExit();
+        return true;
+      }
+      if (key === "ArrowLeft" || key === "ArrowRight" || key === "q" || key === "d") {
+        this.tournamentExitConfirmIndex = this.tournamentExitConfirmIndex === 0 ? 1 : 0;
+        this.audio.play("menu");
+        return true;
+      }
+      if (key === "Enter" || key === " ") {
+        if (this.tournamentExitConfirmIndex === 0) this.cancelTournamentExit();
+        else this.confirmTournamentExit();
+        return true;
+      }
+      return true;
+    }
+
+    handleTournamentExitPromptPointer(x, y) {
+      if (!this.tournamentExitPrompt) return false;
+      const buttons = this.tournamentExitButtons();
+      for (let index = 0; index < buttons.length; index++) {
+        const button = buttons[index];
+        if (!inside(x, y, button.x, button.y, button.w, button.h)) continue;
+        this.tournamentExitConfirmIndex = index;
+        if (index === 0) this.cancelTournamentExit();
+        else this.confirmTournamentExit();
+        return true;
+      }
+      return true;
+    }
+
+    tournamentExitButtons() {
+      return [
+        { x: 260, y: 332, w: 210, h: 36, label: "CONTINUER LE TOURNOI" },
+        { x: 490, y: 332, w: 210, h: 36, label: "QUITTER VERS L'ACCUEIL" }
+      ];
     }
 
     handlePauseAction(action) {
@@ -1091,6 +1551,7 @@
     }
 
     handlePointerDown(x, y) {
+      if (this.tournamentExitPrompt) return this.handleTournamentExitPromptPointer(x, y);
       if (this.screen === "title") return this.handleTitlePointer(x, y);
       if (this.handleHomeButtonPointer(x, y)) return true;
       if (this.screen === "playerSelect") return this.handlePlayerSelectPointer(x, y);
@@ -1100,6 +1561,8 @@
       if (this.screen === "tournamentSetup") return this.handleTournamentSetupPointer(x, y);
       if (this.screen === "tournamentBracket") return this.handleTournamentBracketPointer(x, y);
       if (this.screen === "tournamentVictory") return this.handleTournamentVictoryPointer(x, y);
+      if (this.screen === "tournamentPhaseTransition") return this.handleTournamentPhaseTransitionPointer(x, y);
+      if (this.screen === "tournamentSummary") return this.handleTournamentSummaryPointer(x, y);
       if (this.screen === "tournamentIntro") {
         if (inside(x, y, 145, 130, 670, 292)) this.startTournamentMatch();
         return true;
@@ -1107,7 +1570,7 @@
       if (this.screen === "pause") return this.handlePausePointer(x, y);
       if (this.screen !== "play") return false;
       if (inside(x, y, 694, 511, 64, 22)) {
-        this.quitMatch();
+        this.goHome();
         return true;
       }
       if (inside(x, y, 766, 511, 76, 22)) return this.cycleRacketForRole("p1");
@@ -1190,8 +1653,12 @@
         }
         return false;
       }
+      const summaryId = this.tournamentSummaryMatchId || this.tournament.lastSimulatedMatchId;
+      if (summaryId && inside(x, y, 708, 404, 182, 24)) {
+        return this.viewTournamentMatchSummary(summaryId);
+      }
       if (inside(x, y, 320, 474, 320, 34)) {
-        if (this.tournament.result && this.tournament.result.championId) this.startTitle();
+        if (this.tournament.result && this.tournament.result.championId) this.goHome();
         else this.startTournamentMatch();
         return true;
       }
@@ -1211,6 +1678,22 @@
     handleTournamentVictoryPointer(x, y) {
       if (inside(x, y, 350, 488, 260, 34)) {
         this.startTitle();
+        return true;
+      }
+      return false;
+    }
+
+    handleTournamentPhaseTransitionPointer(x, y) {
+      if (inside(x, y, 340, 476, 280, 34) || inside(x, y, 0, 0, this.width, this.height)) {
+        this.continueTournamentPhaseTransition();
+        return true;
+      }
+      return false;
+    }
+
+    handleTournamentSummaryPointer(x, y) {
+      if (inside(x, y, 350, 476, 260, 34)) {
+        this.returnFromTournamentSummary();
         return true;
       }
       return false;
@@ -1296,6 +1779,13 @@
     }
 
     countdownLabel() {
+      if (this.countdownKind === "resume") {
+        if (this.matchCountdown > 2) return "3";
+        if (this.matchCountdown > 1) return "2";
+        if (this.matchCountdown > 0.25) return "1";
+        if (this.matchCountdown > 0) return "REPRISE";
+        return "";
+      }
       if (this.matchCountdown > 3) return "3";
       if (this.matchCountdown > 2) return "2";
       if (this.matchCountdown > 1) return "1";
@@ -1307,7 +1797,7 @@
       const label = this.countdownLabel();
       if (!label || label === this.lastCountdownCue) return;
       this.lastCountdownCue = label;
-      this.audio.play(label === "GO!" ? "go" : "countdown");
+      this.audio.play(label === "GO!" || label === "REPRISE" ? "go" : "countdown");
     }
 
     handleKeyDown(key) {
@@ -1325,6 +1815,8 @@
         return;
       }
 
+      if (this.tournamentExitPrompt) return this.handleTournamentExitPromptKey(key);
+      if (key === "Home") return this.goHome();
       if (this.handleHomeButtonKey(key)) return;
       if (this.screen === "title") return this.handleTitleKey(key);
       if (this.screen === "how" || this.screen === "credits") return this.handleSimplePanelKey(key);
@@ -1336,6 +1828,8 @@
       if (this.screen === "tournamentSetup") return this.handleTournamentSetupKey(key);
       if (this.screen === "tournamentBracket") return this.handleTournamentBracketKey(key);
       if (this.screen === "tournamentVictory") return this.handleTournamentVictoryKey(key);
+      if (this.screen === "tournamentPhaseTransition") return this.handleTournamentPhaseTransitionKey(key);
+      if (this.screen === "tournamentSummary") return this.handleTournamentSummaryKey(key);
       if (this.screen === "tournamentIntro") return this.handleTournamentIntroKey(key);
       if (this.screen === "play") return this.handlePlayKey(key);
       if (this.screen === "pause") return this.handlePauseKey(key);
@@ -1502,8 +1996,8 @@
       if (key === "ArrowDown" || key === "s") return this.moveGridVertical(1, total, "tournamentCursor");
       if (key !== "Enter" && key !== " ") return;
       if (this.tournamentCursor === players.length) {
-        this.selected.tournamentOpponents = this.randomTournamentOpponents(4);
-        this.message("RANDOM ALL : tirage au sort, responsabilité limitée.", 2);
+        this.selected.tournamentOpponents = this.randomTournamentOpponents();
+        this.message("TOUT LE MONDE : liste complète mélangée avant tirage du tableau.", 2.3);
       } else if (this.tournamentCursor === players.length + 1) {
         this.screen = "tournamentSetup";
         this.setupCursor = 0;
@@ -1544,13 +2038,13 @@
         const idx = this.paddleIndex(this.selected.tournamentPaddle);
         this.selected.tournamentPaddle = CFG.PADDLE_TYPES[wrap(idx + dir, CFG.PADDLE_TYPES.length)].id;
       } else {
-        this.message("Les Machines restent en NORMAL. Pas parfaites, juste pénibles.", 1.8);
+        this.message("Machines ajoutées automatiquement, simulations IA prêtes.", 1.8);
       }
       this.audio.play("menu");
     }
 
     handleTournamentIntroKey(key) {
-      if (key === "Escape") return this.startTitle();
+      if (key === "Escape") return this.goHome();
       if (key === "Enter") return this.startTournamentMatch();
     }
 
@@ -1566,15 +2060,26 @@
         }
         return;
       }
-      if (key === "Escape") return this.startTitle();
+      const summaryId = this.tournamentSummaryMatchId || this.tournament.lastSimulatedMatchId;
+      if ((key === "v" || key === "r") && summaryId) return this.viewTournamentMatchSummary(summaryId);
+      if (key === "Escape") return this.goHome();
       if (key === "Enter" || key === "r") {
-        if (this.tournament.result && this.tournament.result.championId) return this.startTitle();
+        if (this.tournament.result && this.tournament.result.championId) return this.goHome();
         return this.startTournamentMatch();
       }
     }
 
     handleTournamentVictoryKey(key) {
       if (key === "Enter" || key === "Escape" || key === "r") this.startTitle();
+    }
+
+    handleTournamentPhaseTransitionKey(key) {
+      if (key === "Escape") return this.goHome();
+      if (key === "Enter" || key === " ") return this.continueTournamentPhaseTransition();
+    }
+
+    handleTournamentSummaryKey(key) {
+      if (key === "Escape" || key === "Enter" || key === " ") return this.returnFromTournamentSummary();
     }
 
     handlePlayKey(key) {
@@ -1584,7 +2089,8 @@
       } else if (key === "r") {
         this.restartCurrentMatch();
       } else if (key === "Escape") {
-        this.quitMatch();
+        if (this.currentMatchConfig && this.currentMatchConfig.tournamentMatch) this.goHome();
+        else this.quitMatch();
       } else if (this.tryArmSpeedBoosterCombo("p1", key)) {
         return;
       } else if (this.tryArmSpeedBoosterCombo("p2", key)) {
@@ -1600,11 +2106,17 @@
         this.showTournamentBracket("pause");
       }
       if (key === "r") this.restartCurrentMatch();
-      if (key === "Escape") this.quitMatch();
+      if (key === "Escape") {
+        if (this.currentMatchConfig && this.currentMatchConfig.tournamentMatch) this.goHome();
+        else this.quitMatch();
+      }
     }
 
     handleMatchEndKey(key) {
-      if (key === "Escape") return this.startTitle();
+      if (key === "Escape") {
+        if (this.currentMatchConfig && this.currentMatchConfig.tournamentMatch) return this.goHome();
+        return this.startTitle();
+      }
       if (this.currentMatchConfig && this.currentMatchConfig.tournamentMatch) {
         if (key === "Enter" || key === "r") return this.advanceTournament();
       } else {
@@ -1715,15 +2227,18 @@
     return n;
   }
 
-  function createTournamentBracket(humanParticipants) {
-    const humans = humanParticipants.slice();
-    const bracketSize = nextPowerOfTwo(Math.max(2, humans.length));
-    const machineCount = bracketSize - humans.length;
+  function createTournamentBracket(humanParticipants, options = {}) {
+    const seed = Number.isFinite(options.seed) ? options.seed : createTournamentSeed();
+    const rng = createSeededRandom(seed);
+    const enteredParticipants = humanParticipants.slice();
+    const bracketSize = nextPowerOfTwo(Math.max(2, enteredParticipants.length));
+    const machineCount = bracketSize - enteredParticipants.length;
     const machines = createTournamentMachines(machineCount);
-    const participants = seedCompleteBracket(humans, machines.map(player => player.id));
+    const bracketSlots = createSmartFirstRoundSlots(enteredParticipants, machines.map(player => player.id), rng);
+    const participants = bracketSlots.slice();
     const playersById = {};
 
-    humans.forEach(id => { playersById[id] = CFG.playerById(id); });
+    enteredParticipants.forEach(id => { playersById[id] = CFG.playerById(id); });
     machines.forEach(player => { playersById[player.id] = player; });
 
     const rounds = [];
@@ -1739,8 +2254,8 @@
       for (let matchIndex = 0; matchIndex < matchCount; matchIndex++) {
         if (roundIndex === 0) {
           round.push(createTournamentMatch(matchNumber++, roundIndex, matchIndex, label, {
-            playerA: participants[matchIndex * 2],
-            playerB: participants[matchIndex * 2 + 1]
+            playerA: bracketSlots[matchIndex * 2],
+            playerB: bracketSlots[matchIndex * 2 + 1]
           }));
         } else {
           const previousRound = rounds[roundIndex - 1];
@@ -1755,51 +2270,119 @@
     }
 
     assignTournamentNextLinks(rounds);
-    return { bracketSize, machineCount, participants, playersById, rounds };
+    return { seed, bracketSize, machineCount, participants, bracketSlots, playersById, rounds };
+  }
+
+  function createSmartFirstRoundSlots(enteredParticipants, addedMachines, rng) {
+    const humanIds = [];
+    const machineIds = [];
+    enteredParticipants.forEach(id => {
+      if (isTournamentMachineSeed(id)) machineIds.push(id);
+      else humanIds.push(id);
+    });
+    addedMachines.forEach(id => machineIds.push(id));
+
+    const humans = shuffleSeeded(humanIds, rng);
+    const machines = shuffleSeeded(machineIds, rng);
+    const pairs = [];
+
+    while (humans.length >= 2) {
+      pairs.push(randomizedTournamentPair(humans.pop(), humans.pop(), rng));
+    }
+
+    if (humans.length && machines.length) {
+      pairs.push(randomizedTournamentPair(humans.pop(), machines.pop(), rng));
+    }
+
+    while (machines.length >= 2) {
+      pairs.push(randomizedTournamentPair(machines.pop(), machines.pop(), rng));
+    }
+
+    return shuffleSeeded(pairs, rng).flat();
+  }
+
+  function randomizedTournamentPair(a, b, rng) {
+    return rng() < 0.5 ? [a, b] : [b, a];
   }
 
   function createTournamentMachines(count) {
-    const base = CFG.playerById("machine");
+    const base = (CFG.PLAYERS || []).find(player => player.id === "machine") || {
+      id: "machine",
+      name: "Machine",
+      initials: "CPU",
+      files: [],
+      difficulty: "normal"
+    };
     const machines = [];
     for (let index = 0; index < count; index++) {
-      const numbered = count > 1;
-      const id = numbered ? `machine-${index + 1}` : "machine";
+      const machineNumber = index + 1;
+      const id = `machine-${machineNumber}`;
       machines.push(Object.assign({}, base, {
         id,
         baseId: "machine",
         assetId: "machine",
-        name: numbered ? `Machine ${index + 1}` : "Machine",
+        name: `Machine ${machineNumber}`,
+        initials: "CPU",
+        controlType: "cpu",
+        type: "machine",
         difficulty: "normal"
       }));
     }
     return machines;
   }
 
-  function seedCompleteBracket(humans, machines) {
-    if (!machines.length) return humans.slice();
-    const seeds = [];
+  function isTournamentMachineSeed(id) {
+    if (!id) return false;
+    if (id === "machine" || /^machine-\d+$/.test(String(id))) return true;
+    const player = CFG.playerById ? CFG.playerById(id) : null;
+    if (player && (player.baseId === "machine" || player.assetId === "machine")) return true;
+    const label = normalizeTournamentSeedLabel(player && player.name);
+    return label === "machine" || label === "lamachine" || label === "ordinateur" || label === "ia" || label === "cpu";
+  }
 
-    if (machines.length === 1) {
-      const lastHumanIndex = humans.length - 1;
-      for (let index = 0; index < lastHumanIndex; index += 2) {
-        seeds.push(humans[index], humans[index + 1]);
-      }
-      seeds.push(humans[lastHumanIndex], machines[0]);
-      return seeds;
-    }
+  function normalizeTournamentSeedLabel(value) {
+    return String(value || "")
+      .trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  }
 
-    let humanIndex = 0;
-    let machineIndex = 0;
-    while (machineIndex < machines.length && humanIndex < humans.length) {
-      seeds.push(humans[humanIndex++], machines[machineIndex++]);
+  function createTournamentSeed() {
+    return Math.floor(Math.random() * 0xffffffff) >>> 0;
+  }
+
+  function hashTournamentSeed(value) {
+    let hash = 2166136261;
+    const str = String(value || "");
+    for (let index = 0; index < str.length; index++) {
+      hash ^= str.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
     }
-    while (humanIndex < humans.length) {
-      seeds.push(humans[humanIndex++], humans[humanIndex++]);
+    return hash >>> 0;
+  }
+
+  function createSeededRandom(seed) {
+    let state = (seed >>> 0) || 0x6d2b79f5;
+    return function seededRandom() {
+      state += 0x6d2b79f5;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function shuffleSeeded(values, rng) {
+    const shuffled = values.slice();
+    for (let index = shuffled.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(rng() * (index + 1));
+      const tmp = shuffled[index];
+      shuffled[index] = shuffled[swapIndex];
+      shuffled[swapIndex] = tmp;
     }
-    while (machineIndex < machines.length) {
-      seeds.push(machines[machineIndex++], machines[machineIndex++]);
-    }
-    return seeds;
+    return shuffled;
   }
 
   function createTournamentMatch(number, roundIndex, matchIndex, roundLabelText, slots) {
@@ -1815,9 +2398,15 @@
       nextMatchId: null,
       nextSlot: null,
       winner: null,
+      winnerId: null,
       status: "upcoming",
       scoreA: null,
-      scoreB: null
+      scoreB: null,
+      score: null,
+      simulated: false,
+      summaryData: null,
+      automatic: false,
+      automaticReason: ""
     };
   }
 
@@ -1872,5 +2461,13 @@
     return -1;
   }
 
+  window.BadPongTournament = {
+    createTournamentBracket,
+    createTournamentSeed,
+    createSeededRandom,
+    hashTournamentSeed,
+    nextPowerOfTwo,
+    createTournamentMachines
+  };
   window.Game = Game;
 })();

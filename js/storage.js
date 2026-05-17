@@ -3,6 +3,7 @@
 
   const STATS_KEY = "fab_fifty_bad_pong_stats";
   const CONTROLS_KEY = "fab_fifty_bad_pong_controls";
+  const TOURNAMENT_STATE_KEY = "fab_fifty_bad_pong_tournament_state";
 
   const DEFAULT_STATS = {
     games: 0,
@@ -75,6 +76,22 @@
     return loadControls();
   }
 
+  function saveTournamentState(tournament) {
+    saveObject(TOURNAMENT_STATE_KEY, tournament || {});
+  }
+
+  function loadTournamentState() {
+    return loadObject(TOURNAMENT_STATE_KEY, {});
+  }
+
+  function clearTournamentState() {
+    try {
+      localStorage.removeItem(TOURNAMENT_STATE_KEY);
+    } catch (error) {
+      // LocalStorage is optional. Bad Pong must stay playable without it.
+    }
+  }
+
   function normalizeControls(controls) {
     const normalized = {};
     Object.keys(DEFAULT_CONTROLS).forEach(key => {
@@ -91,6 +108,9 @@
     recordTournament,
     loadControls,
     saveControls,
-    resetControls
+    resetControls,
+    saveTournamentState,
+    loadTournamentState,
+    clearTournamentState
   };
 })();

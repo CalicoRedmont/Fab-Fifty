@@ -25,7 +25,8 @@
     "ArrowRight",
     " ",
     "=",
-    "Enter"
+    "Enter",
+    "Home"
   ]);
   let booted = false;
   let pendingBootMode = "title";
