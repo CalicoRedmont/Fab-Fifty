@@ -107,11 +107,16 @@
     Game.prototype.selectWarGameOlivierPilot = function (index) {
       const pilot = WAR_OLIVIER_PILOTS[index] || WAR_OLIVIER_PILOTS[0];
       this.wargamePilotOverride = Object.assign({}, pilot);
+      this.saveWarGamePilotSession(pilot);
       this.startWarGameBoot();
     };
 
     Game.prototype.startWarGameBoot = function () {
       if (!CFG.ENABLE_WARGAME) return;
+      if (this.shouldSelectWarGameOlivierPilot()) {
+        this.startWarGameOlivierSelect();
+        return;
+      }
       this.resetWarGameState();
       this.wargame.bootTime = 0;
       this.wargame.glitch = 0.45;
@@ -884,7 +889,15 @@
       this.drawText(`CORE: ${corePct}%`, 664, 99, 12, corePct <= 30 ? this.colors.red : this.colors.amber);
       this.drawText(`HEAVY: ${state.heavyCooldown <= 0 ? "READY" : `${state.heavyCooldown.toFixed(1)}S`}`, 664, 123, 11, this.colors.white);
 
-      this.drawText("ARROWS/ZQSD MOVE   SPACE FIRE   X/CTRL HEAVY   ESC TITLE", 480, 520, 11, this.colors.green, "center");
+      this.drawWarControlsLegend();
+    };
+
+    Game.prototype.drawWarControlsLegend = function () {
+      this.panel(22, 448, 382, 78, 0.52);
+      this.drawText("COMMANDES", 40, 468, 10, this.colors.amber);
+      this.drawText("DEPLACEMENT: HAUT BAS GAUCHE DROITE", 40, 487, 9, this.colors.green);
+      this.drawText("TIR MITRAILLEUSE: ESPACE", 40, 505, 9, this.colors.white);
+      this.drawText("TIR MISSILE: X / CTRL", 40, 523, 9, this.colors.white);
     };
 
     Game.prototype.warGamePilotPlayer = function () {
@@ -913,6 +926,26 @@
         || players.find(candidate => candidate.id === playerId)
         || null;
       return player && player.id !== "machine" ? player : null;
+    };
+
+    Game.prototype.shouldSelectWarGameOlivierPilot = function () {
+      if (this.wargamePilotOverride) return false;
+      const session = window.BadPongSession || {};
+      if (session.playerId) return false;
+      const playerName = String(session.playerName || window.BadPongCurrentPlayerName || "").trim();
+      return normalizeWarName(warFirstName(playerName)) === "olivier";
+    };
+
+    Game.prototype.saveWarGamePilotSession = function (pilot) {
+      const player = this.warGamePilotById(pilot && pilot.playerId);
+      const playerName = (player && player.name) || (pilot && pilot.displayName) || "Olivier";
+      window.BadPongCurrentPlayerName = playerName;
+      window.BadPongSession = Object.assign({}, window.BadPongSession, {
+        playerName,
+        playerId: pilot.playerId,
+        pilotDisplayName: pilot.displayName,
+        pilotCallsign: pilot.callsign
+      });
     };
 
     Game.prototype.resolveWarGameSelectedPilot = function () {
