@@ -9,6 +9,10 @@
     "BAD PONG INTERFACE DISCONNECTED",
     "LOADING WARGAME.EXE"
   ];
+  const WAR_OLIVIER_PILOTS = [
+    { playerId: "olivierr", displayName: "OLIVIER R.", callsign: "OLIVIER-R" },
+    { playerId: "olivierd", displayName: "OLIVIER D.", callsign: "OLIVIER-D" }
+  ];
   const WAR = {
     bootLineDelay: 0.68,
     bootExitDelay: 0.95,
@@ -31,7 +35,8 @@
     const baseStartTitle = Game.prototype.startTitle;
 
     Game.prototype.isWarGameScreen = function () {
-      return this.screen === "wargameBoot"
+      return this.screen === "wargameOlivierSelect"
+        || this.screen === "wargameBoot"
         || this.screen === "wargame"
         || this.screen === "wargameGameOver"
         || this.screen === "wargameVictory";
@@ -39,11 +44,14 @@
 
     Game.prototype.startTitle = function () {
       this.resetWarGameUnlock();
+      this.wargamePilotOverride = null;
+      this.wargameOlivierCursor = 0;
       if (this.wargame) this.wargame.returningToTitle = true;
       return baseStartTitle.call(this);
     };
 
     Game.prototype.draw = function () {
+      if (this.screen === "wargameOlivierSelect") return this.drawWarGameOlivierSelect();
       if (this.screen === "wargameBoot") return this.drawWarGameBoot();
       if (this.screen === "wargame") return this.drawWarGame();
       if (this.screen === "wargameGameOver") return this.drawWarGameGameOver();
@@ -53,6 +61,7 @@
 
     Game.prototype.update = function (dt) {
       const safeDt = Math.min(0.033, dt);
+      if (this.screen === "wargameOlivierSelect") return;
       if (this.screen === "wargameBoot") return this.updateWarGameBoot(safeDt);
       if (this.screen === "wargame") return this.updateWarGame(safeDt);
       return baseUpdate.call(this, dt);
@@ -72,9 +81,30 @@
       if (!CFG.ENABLE_WARGAME || this.screen !== "title") return false;
       if (!key || key.length !== 1 || !/[a-z]/i.test(key)) return false;
       this.wargameUnlockBuffer = `${this.wargameUnlockBuffer || ""}${key.toUpperCase()}`.slice(-7);
+      if (this.wargameUnlockBuffer === "OLIVIER") {
+        this.startWarGameOlivierSelect();
+        return true;
+      }
       if (this.wargameUnlockBuffer !== "WARGAME") return false;
+      this.wargamePilotOverride = null;
       this.startWarGameBoot();
       return true;
+    };
+
+    Game.prototype.startWarGameOlivierSelect = function () {
+      if (!CFG.ENABLE_WARGAME) return;
+      this.wargamePilotOverride = null;
+      this.wargameOlivierCursor = 0;
+      this.resetWarGameState();
+      this.wargame.glitch = 0.35;
+      this.screen = "wargameOlivierSelect";
+      this.audio.play("validate");
+    };
+
+    Game.prototype.selectWarGameOlivierPilot = function (index) {
+      const pilot = WAR_OLIVIER_PILOTS[index] || WAR_OLIVIER_PILOTS[0];
+      this.wargamePilotOverride = Object.assign({}, pilot);
+      this.startWarGameBoot();
     };
 
     Game.prototype.startWarGameBoot = function () {
@@ -136,6 +166,7 @@
         rapidCooldown: 0,
         heavyCooldown: 0,
         explosions: [],
+        selectedPilot: this.wargamePilotOverride ? Object.assign({}, this.wargamePilotOverride) : null,
         lastStatus: "SANCTUARY ONLINE: MONTROUGE",
         lastStatusDetail: "",
         machineGlitch: 0,
@@ -157,6 +188,27 @@
 
     Game.prototype.handleWarGameKey = function (key, baseHandle) {
       if (key === CFG.SOUND_TOGGLE_KEY || key === "f") return baseHandle.call(this, key);
+      if (this.screen === "wargameOlivierSelect") {
+        if (key === "Escape") {
+          this.keys.clear();
+          this.startTitle();
+          return;
+        }
+        if (key === "1") return this.selectWarGameOlivierPilot(0);
+        if (key === "2") return this.selectWarGameOlivierPilot(1);
+        if (key === "ArrowUp" || key === "z" || key === "w") {
+          this.wargameOlivierCursor = this.wargameOlivierCursor === 0 ? WAR_OLIVIER_PILOTS.length - 1 : this.wargameOlivierCursor - 1;
+          this.audio.play("menu");
+          return;
+        }
+        if (key === "ArrowDown" || key === "s") {
+          this.wargameOlivierCursor = (this.wargameOlivierCursor + 1) % WAR_OLIVIER_PILOTS.length;
+          this.audio.play("menu");
+          return;
+        }
+        if (key === "Enter" || key === " ") return this.selectWarGameOlivierPilot(this.wargameOlivierCursor || 0);
+        return;
+      }
       if (this.screen === "wargameGameOver" || this.screen === "wargameVictory") {
         if (key === "Enter" || key === " ") {
           this.keys.clear();
@@ -179,7 +231,8 @@
       if (!this.wargame) this.resetWarGameState();
       this.wargame.bootTime += dt;
       this.wargame.glitch = Math.max(0, this.wargame.glitch - dt);
-      const bootDuration = WAR_BOOT_LINES.length * WAR.bootLineDelay + WAR.bootExitDelay;
+      const bootLines = this.warGameBootLines();
+      const bootDuration = bootLines.length * WAR.bootLineDelay + WAR.bootExitDelay;
       if (this.wargame.bootTime >= bootDuration) this.startWarGame();
     };
 
@@ -455,9 +508,50 @@
       this.wargame.explosions.push({ x, y, r: 3, maxR: radius, grow: radius * 2.4, life: 0.36, color });
     };
 
+    Game.prototype.drawWarGameOlivierSelect = function () {
+      const ctx = this.ctx;
+      const selected = this.wargameOlivierCursor || 0;
+      ctx.save();
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, this.width, this.height);
+      this.drawWarConsoleGrid(0.18);
+      this.drawWarGlitch(this.wargame ? this.wargame.glitch : 0);
+      this.panel(232, 86, 496, 318, 0.72);
+      this.drawText("IDENTITY CHECK", 480, 132, 19, this.colors.green, "center");
+      this.drawText("PASSWORD: OLIVIER", 480, 164, 16, this.colors.white, "center");
+      this.neon("DE QUEL OLIVIER S'AGIT-IL ?", 480, 218, 22, this.colors.green, "center");
+      WAR_OLIVIER_PILOTS.forEach((pilot, index) => {
+        const y = 270 + index * 42;
+        const active = index === selected;
+        if (active) {
+          ctx.fillStyle = "rgba(57,255,104,0.13)";
+          ctx.fillRect(318, y - 27, 324, 34);
+          if (Math.floor(performance.now() / 180) % 2 === 0) this.drawText(">", 300, y, 20, this.colors.amber);
+        }
+        this.drawText(`[${index + 1}] ${pilot.displayName}`, 338, y, active ? 20 : 18, active ? this.colors.amber : this.colors.green);
+      });
+      this.drawText("SELECT PILOT ID", 480, 378, 14, this.colors.white, "center");
+      this.drawWarScanlines();
+      ctx.restore();
+    };
+
+    Game.prototype.warGameBootLines = function () {
+      const pilot = this.wargame && this.wargame.selectedPilot;
+      if (!pilot) return WAR_BOOT_LINES;
+      return [
+        "C:\\BADPONG> OLIVIER",
+        "IDENTITY CONFIRMED",
+        `PILOT SELECTED: ${pilot.displayName}`,
+        "ACCESSING DARKWEB NODE",
+        "BAD PONG INTERFACE DISCONNECTED",
+        "LOADING WARGAME.EXE"
+      ];
+    };
+
     Game.prototype.drawWarGameBoot = function () {
       const ctx = this.ctx;
       const state = this.wargame || { bootTime: 0, glitch: 0 };
+      const bootLines = this.warGameBootLines();
       ctx.save();
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, this.width, this.height);
@@ -465,11 +559,11 @@
       this.drawWarGlitch(state.glitch);
 
       this.drawText("BAD PONG INTERFACE SHELL", 48, 54, 14, this.colors.green);
-      const visible = Math.min(WAR_BOOT_LINES.length, Math.floor(state.bootTime / WAR.bootLineDelay) + 1);
+      const visible = Math.min(bootLines.length, Math.floor(state.bootTime / WAR.bootLineDelay) + 1);
       for (let i = 0; i < visible; i++) {
         const y = 132 + i * 42;
         const color = i === 0 ? this.colors.white : i === visible - 1 ? this.colors.amber : this.colors.green;
-        this.drawText(WAR_BOOT_LINES[i], 86, y, i === 0 ? 22 : 20, color);
+        this.drawText(bootLines[i], 86, y, i === 0 ? 22 : 20, color);
       }
 
       const cursorOn = Math.floor(performance.now() / 160) % 2 === 0;
@@ -749,9 +843,11 @@
 
     Game.prototype.drawWarHud = function () {
       const state = this.wargame;
+      const selectedPilot = state.selectedPilot;
       const pilot = this.warGamePilotPlayer();
       const machine = CFG.playerById ? CFG.playerById("machine") : null;
-      const pilotName = formatWarPilotName(pilot);
+      const pilotName = formatWarPilotName(pilot, selectedPilot);
+      const callsign = formatWarPilotCallsign(pilot, selectedPilot);
       const lost = state.cities.filter(city => !city.active).length;
       const corePct = Math.max(0, Math.round((state.machineCore.hp / state.machineCore.maxHp) * 100));
       this.panel(22, 20, 312, 166, 0.62);
@@ -759,7 +855,7 @@
       this.drawWarPilotPortrait(pilot, 40, 60, 74, 72);
       this.drawText("PILOT", 128, 72, 11, this.colors.amber);
       this.drawText(pilotName, 128, 92, 15, this.colors.white);
-      this.drawText(`CALLSIGN: ${pilotName}`, 128, 112, 11, this.colors.white);
+      this.drawText(`CALLSIGN: ${callsign}`, 128, 112, 11, this.colors.white);
       this.drawText("AIRCRAFT: PEACEKEEPER-50", 128, 132, 11, this.colors.white);
       this.drawText(`HUMANITY: ${Math.round(state.humanity)}%`, 40, 158, 12, this.colors.amber);
       this.drawText(`CITIES LOST: ${lost} / ${state.cities.length}`, 178, 158, 12, lost ? this.colors.red : this.colors.green);
@@ -781,6 +877,12 @@
 
     Game.prototype.warGamePilotPlayer = function () {
       const players = CFG.PLAYERS || [];
+      const selectedPilot = this.wargame && this.wargame.selectedPilot;
+      if (selectedPilot && selectedPilot.playerId) {
+        return (CFG.playerById && CFG.playerById(selectedPilot.playerId))
+          || players.find(player => player.id === selectedPilot.playerId)
+          || null;
+      }
       const session = window.BadPongSession || {};
       const playerName = String(session.playerName || window.BadPongCurrentPlayerName || "Fabien").trim();
       const normalizedName = normalizeWarName(warFirstName(playerName));
